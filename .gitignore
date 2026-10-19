@@ -1,0 +1,8 @@
+sportmatch.cfg
+sportmatch.db
+*.jar
+*.class
+build/
+.gradle/
+.idea/
+local.properties
