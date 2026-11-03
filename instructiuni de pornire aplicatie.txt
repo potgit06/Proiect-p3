@@ -2,13 +2,7 @@
 ---Pornire aplicatie---
 
 1. ipconfic in cmd ca sa vezi adresa ip ca sa poti sa rulezi aplicatia
-2.    javac -cp "sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch.java
+2.    javac -encoding UTF-8 -cp "sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch.java
       java -cp ".;sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch
       acestea folosesc la deschiderea aplicatiei
-3. parola e 2nwzw4fz
-4. have fun
-
-
----Optional---
-1. daca vrei sa rulezi direct pe laptop cu emulator deschide android studio   
-   si dai pe play din bara de sus si il poti folosi ca un telefon normal
+3. have fun
