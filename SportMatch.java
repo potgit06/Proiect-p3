@@ -97,6 +97,25 @@ public class SportMatch {
         CREATE TABLE IF NOT EXISTS meta (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS messages (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_id    INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            to_id      INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            body       TEXT NOT NULL,
+            seen       INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS notifications (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_id  INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            kind       TEXT NOT NULL,
+            other_id   INTEGER,
+            text       TEXT NOT NULL,
+            seen       INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')))
         """
     };
 
@@ -199,7 +218,33 @@ public class SportMatch {
   --text: #1f2d2a;
   --muted: #6b7b77;
   --line: #e1e8e5;
+  --soft: #eef4f1;        /* fundal discret: chips, statistici, etichete */
+  --soft-text: #15503f;
+  --item: #fbfdfc;
+  --body-text: #3a4a46;
+  --nav-bg: rgba(255, 255, 255, 0.94);
+  --shadow: rgba(0, 0, 0, 0.05);
+  --auth: linear-gradient(-45deg, #1e6f5c, #15503f, #2a8c73, #0f3d31);
 }
+/* tema intunecata */
+:root[data-theme="dark"] {
+  --main: #3fae8f;
+  --main-dark: #2f8c72;
+  --accent: #f4a259;
+  --bg: #101e1a;
+  --card: #182c27;
+  --text: #e7f0ed;
+  --muted: #93a8a2;
+  --line: #26413a;
+  --soft: #1f352f;
+  --soft-text: #9fe0cb;
+  --item: #1c312b;
+  --body-text: #c3d4cf;
+  --nav-bg: rgba(24, 44, 39, 0.94);
+  --shadow: rgba(0, 0, 0, 0.35);
+  --auth: linear-gradient(-45deg, #15332b, #0b1b17, #1d4639, #0a1512);
+}
+html { background: var(--bg); }
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -227,7 +272,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 28px 18px;
-  background: linear-gradient(-45deg, #1e6f5c, #15503f, #2a8c73, #0f3d31);
+  background: var(--auth);
   background-size: 400% 400%;
   animation: gradientShift 12s ease infinite;
 }
@@ -252,7 +297,7 @@ body {
 .auth-card {
   width: 100%;
   max-width: 380px;
-  background: #fff;
+  background: var(--card);
   border-radius: 20px;
   padding: 22px 20px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
@@ -264,6 +309,41 @@ body {
 }
 .auth-card h2 { margin: 0 0 4px; font-size: 20px; }
 .auth-card .sub { margin: 0 0 4px; color: var(--muted); font-size: 14px; line-height: 1.4; }
+
+/* ---------- buton tema ---------- */
+.theme-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.theme-btn svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.35s ease;
+}
+.theme-btn:active svg { transform: rotate(-25deg) scale(0.9); }
+.head-right { display: flex; align-items: center; gap: 8px; }
+.head-right .theme-btn { width: 36px; height: 34px; }
+.auth-theme {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  color: #fff;
+  z-index: 8;
+}
+.auth-theme svg { width: 21px; height: 21px; }
 .shake { animation: shake 0.45s; }
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -281,7 +361,7 @@ input, select {
   border: 1px solid var(--line);
   border-radius: 12px;
   font-size: 16px;
-  background: #fff;
+  background: var(--card);
   color: var(--text);
   appearance: none;
   -webkit-appearance: none;
@@ -375,7 +455,7 @@ input:focus, select:focus {
   font-size: 13px;
   cursor: pointer;
 }
-main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
+main { padding: 16px 14px 118px; max-width: 640px; margin: 0 auto; }
 .section { display: none; }
 .section.active { display: block; animation: fadeIn 0.35s ease both; }
 .card {
@@ -383,7 +463,7 @@ main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
   border-radius: 16px;
   padding: 16px;
   margin-bottom: 14px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 10px var(--shadow);
 }
 .card h2 { margin: 0 0 6px; font-size: 17px; font-weight: 650; }
 .hint { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
@@ -392,7 +472,7 @@ main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
   border: 1px solid var(--line);
   border-radius: 14px;
   margin-top: 10px;
-  background: #fbfdfc;
+  background: var(--item);
   animation: popItem 0.35s ease both;
 }
 @keyframes popItem {
@@ -404,8 +484,8 @@ main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
 .chip {
   display: inline-block;
   font-size: 12px;
-  background: #e2f1eb;
-  color: var(--main-dark);
+  background: var(--soft);
+  color: var(--soft-text);
   border-radius: 999px;
   padding: 3px 10px;
   margin: 6px 5px 0 0;
@@ -417,7 +497,7 @@ main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
   padding: 11px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--card);
   color: var(--text);
   font-size: 15px;
   cursor: pointer;
@@ -428,8 +508,8 @@ main { padding: 16px 14px 100px; max-width: 640px; margin: 0 auto; }
   margin-top: 12px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #e8f4ef;
-  color: var(--main-dark);
+  background: var(--soft);
+  color: var(--soft-text);
   font-size: 14px;
   line-height: 1.5;
   white-space: pre-line;
@@ -440,24 +520,48 @@ nav {
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
+  background: var(--nav-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-top: 1px solid var(--line);
+  box-shadow: 0 -4px 18px rgba(21, 80, 63, 0.07);
   display: flex;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  gap: 2px;
+  padding: 7px 7px calc(7px + env(safe-area-inset-bottom, 0px));
   z-index: 5;
 }
 nav button {
   flex: 1;
   border: none;
   background: none;
-  padding: 12px 2px 13px;
-  font-size: 13px;
+  border-radius: 14px;
+  padding: 7px 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
   color: var(--muted);
   cursor: pointer;
-  border-top: 3px solid transparent;
-  transition: color 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  transition: color 0.22s, background 0.22s, transform 0.16s;
 }
-nav button.active { color: var(--main); font-weight: 650; border-top-color: var(--main); }
+nav button svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.25s ease;
+}
+nav button:hover { color: var(--main); }
+nav button:active { transform: scale(0.93); }
+nav button.active { color: var(--main); background: var(--soft); }
+nav button.active svg { transform: translateY(-2px) scale(1.1); }
+nav button.active span { font-weight: 700; }
 
 /* ---------- avatar ---------- */
 .ava {
@@ -482,15 +586,15 @@ nav button.active { color: var(--main); font-weight: 650; border-top-color: var(
 .profile-id h2 { margin: 0; font-size: 20px; word-break: break-word; }
 .profile-id .where { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
 .stats { display: flex; gap: 6px; margin-top: 16px; text-align: center; }
-.stats div { flex: 1; padding: 10px 4px; background: #f4f8f6; border-radius: 12px; }
+.stats div { flex: 1; padding: 10px 4px; background: var(--soft); border-radius: 12px; }
 .stats b { display: block; font-size: 18px; }
 .stats span { font-size: 11px; color: var(--muted); }
 .bio { margin: 14px 0 0; font-size: 14px; line-height: 1.5; white-space: pre-line; }
 .bio.none { color: var(--muted); font-style: italic; }
 .row { display: flex; gap: 8px; margin-top: 14px; }
 .row .btn { margin-top: 0; }
-.btn.ghost { background: #fff; color: var(--main); border: 1px solid var(--main); }
-.btn.ghost:hover { background: #eef6f3; }
+.btn.ghost { background: var(--card); color: var(--main); border: 1px solid var(--main); }
+.btn.ghost:hover { background: var(--soft); }
 textarea {
   width: 100%;
   min-height: 92px;
@@ -501,6 +605,7 @@ textarea {
   font-family: inherit;
   color: var(--text);
   resize: vertical;
+  background: var(--card);
 }
 textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px rgba(30,111,92,0.15); }
 .editor { display: none; }
@@ -510,7 +615,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
 .pick-btns { display: flex; flex-direction: column; gap: 8px; }
 .pick-btns button {
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--card);
   color: var(--text);
   border-radius: 10px;
   padding: 8px 14px;
@@ -526,7 +631,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
   border-radius: 16px;
   padding: 14px 15px 12px;
   margin-bottom: 12px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 10px var(--shadow);
   animation: popItem 0.35s ease both;
 }
 .post-head { display: flex; align-items: center; gap: 10px; }
@@ -547,12 +652,12 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
   flex: none;
 }
 .post h3 { margin: 11px 0 6px; font-size: 16px; line-height: 1.35; }
-.post p { margin: 0; font-size: 14px; line-height: 1.5; color: #3a4a46; }
+.post p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--body-text); }
 .post-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .post-meta span {
   font-size: 12px;
-  background: #eef4f1;
-  color: var(--main-dark);
+  background: var(--soft);
+  color: var(--soft-text);
   border-radius: 8px;
   padding: 5px 10px;
 }
@@ -577,13 +682,13 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
   transition: transform 0.1s;
 }
 .join:active { transform: scale(0.97); }
-.join.off { background: #fff; color: var(--main); }
-.join.own { background: #f4f8f6; color: var(--muted); border-color: var(--line); cursor: default; }
+.join.off { background: var(--card); color: var(--main); }
+.join.own { background: var(--soft); color: var(--muted); border-color: var(--line); cursor: default; }
 .filters { display: flex; gap: 7px; overflow-x: auto; padding: 2px 0 8px; -webkit-overflow-scrolling: touch; }
 .filters button {
   flex: none;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--card);
   color: var(--text);
   border-radius: 999px;
   padding: 8px 15px;
@@ -596,7 +701,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
 .fab {
   position: fixed;
   right: 16px;
-  bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   width: 54px;
   height: 54px;
   border-radius: 50%;
@@ -611,6 +716,241 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
   display: none;
 }
 .fab.show { display: block; }
+
+/* ---------- clasament ---------- */
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  margin-top: 8px;
+  background: var(--item);
+  border: 1px solid var(--line);
+  animation: popItem 0.3s ease both;
+}
+.rank-row .ava { width: 40px; height: 40px; font-size: 15px; }
+.rank-no {
+  width: 30px;
+  flex: none;
+  text-align: center;
+  font-weight: 800;
+  font-size: 16px;
+  color: var(--muted);
+}
+.rank-row.top1, .rank-row.top2, .rank-row.top3 { border-color: var(--main); background: var(--soft); }
+.rank-row.top1 .rank-no, .rank-row.top2 .rank-no, .rank-row.top3 .rank-no { color: var(--main); font-size: 19px; }
+.rank-who { flex: 1; min-width: 0; }
+.rank-who b { display: block; font-size: 15px; cursor: pointer; }
+.rank-who span { font-size: 12px; color: var(--muted); }
+.rank-pts { text-align: right; flex: none; }
+.rank-pts b { display: block; font-size: 17px; color: var(--main); }
+.rank-pts span { font-size: 11px; color: var(--muted); }
+.me-row { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------- chat ---------- */
+.chat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  margin-top: 8px;
+  background: var(--item);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+.chat-row:hover { border-color: var(--main); }
+.chat-row .ava { width: 46px; height: 46px; font-size: 17px; }
+.chat-who { flex: 1; min-width: 0; }
+.chat-who b { display: block; font-size: 15px; }
+.chat-who span {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.badge {
+  min-width: 21px;
+  height: 21px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #3b2a12;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  flex: none;
+}
+.chat-head { display: flex; align-items: center; gap: 11px; margin-bottom: 10px; }
+.chat-head .ava { width: 42px; height: 42px; font-size: 16px; }
+.chat-head b { font-size: 16px; }
+.back {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  flex: none;
+}
+.thread {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-height: 160px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+.bubble {
+  max-width: 78%;
+  padding: 9px 13px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  animation: popItem 0.25s ease both;
+}
+.bubble small { display: block; font-size: 10px; opacity: 0.65; margin-top: 3px; }
+.bubble.them { align-self: flex-start; background: var(--soft); color: var(--text); border-bottom-left-radius: 5px; }
+.bubble.me { align-self: flex-end; background: var(--main); color: #fff; border-bottom-right-radius: 5px; }
+.send-row { display: flex; gap: 8px; margin-top: 10px; }
+.send-row input { flex: 1; }
+.send-row button {
+  flex: none;
+  border: none;
+  background: var(--main);
+  color: #fff;
+  border-radius: 12px;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ---------- notificari ---------- */
+.bell { position: relative; }
+.bell .dot {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #3b2a12;
+  font-size: 10px;
+  font-weight: 800;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+.bell.on .dot { display: inline-flex; }
+.notif {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  margin-top: 8px;
+  background: var(--item);
+  border: 1px solid var(--line);
+}
+.notif.fresh { border-color: var(--main); background: var(--soft); }
+.notif .ava { width: 38px; height: 38px; font-size: 14px; }
+.notif div { flex: 1; min-width: 0; }
+.notif b { display: block; font-size: 14px; font-weight: 600; }
+.notif span { font-size: 12px; color: var(--muted); }
+nav button .dot {
+  position: absolute;
+  top: 4px;
+  right: 50%;
+  margin-right: -17px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: none;
+}
+nav button { position: relative; }
+nav button.has-new .dot { display: block; }
+
+/* ---------- cat valoreaza meciul ---------- */
+.calc { margin-top: 14px; }
+.calc-outcomes { display: flex; gap: 10px; }
+.calc-outcomes div {
+  flex: 1;
+  padding: 12px 10px;
+  border-radius: 14px;
+  text-align: center;
+  border: 1px solid var(--line);
+  background: var(--item);
+}
+.calc-outcomes b { display: block; font-size: 24px; line-height: 1.1; }
+.calc-outcomes span { font-size: 11px; color: var(--muted); }
+.calc-outcomes .won { border-color: var(--main); background: var(--soft); }
+.calc-outcomes .won b { color: var(--main); }
+.calc-outcomes .lost b { color: #c7533f; }
+:root[data-theme="dark"] .calc-outcomes .lost b { color: #ef8b76; }
+.calc-side { margin-top: 12px; }
+.calc-side h3 {
+  margin: 0 0 5px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.calc-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.calc-line:last-child { border-bottom: none; }
+.calc-line .ava { width: 28px; height: 28px; font-size: 11px; }
+.calc-line .who { flex: 1; min-width: 0; }
+.calc-line .lvl { font-size: 12px; color: var(--muted); flex: none; }
+.calc-avg {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--soft);
+  font-size: 13px;
+  color: var(--soft-text);
+}
+.calc-warn { margin-top: 10px; font-size: 13px; color: #c7533f; }
+:root[data-theme="dark"] .calc-warn { color: #ef8b76; }
+
+/* ---------- cod de recuperare ---------- */
+.code-box {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 14px;
+  background: var(--soft);
+  border: 1px dashed var(--main);
+  text-align: center;
+}
+.code-box b {
+  display: block;
+  font-size: 24px;
+  letter-spacing: 2px;
+  color: var(--soft-text);
+  font-family: ui-monospace, Consolas, monospace;
+  margin: 6px 0;
+  word-break: break-all;
+}
 </style>
 </head>
 <body>
@@ -618,6 +958,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
 <!-- ================= LOGIN ================= -->
 <div id="screen-login" class="screen active">
   <div class="auth-bg">
+    <button class="theme-btn auth-theme" onclick="toggleTheme()" title="Schimba tema"></button>
     <div class="brand">
       <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#ffffff"/><path d="M50 36 L63.3 45.7 L58.2 61.3 L41.8 61.3 L36.7 45.7 Z" fill="#1e6f5c"/><path d="M50 36 L50 6 M63.3 45.7 L88 27 M58.2 61.3 L74 84 M41.8 61.3 L26 84 M36.7 45.7 L12 27" stroke="#1e6f5c" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
       <h1>SportMatch</h1>
@@ -632,6 +973,52 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
       <input id="loginPwd" type="password" autocomplete="current-password">
       <button class="btn" onclick="login()">Continua</button>
       <button class="link" onclick="show('register')">Nu ai cont? Creeaza unul</button>
+      <button class="link" onclick="show('recover')">Ai uitat parola?</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RECUPERARE PAROLA ================= -->
+<div id="screen-recover" class="screen">
+  <div class="auth-bg">
+    <button class="theme-btn auth-theme" onclick="toggleTheme()" title="Schimba tema"></button>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#ffffff"/><path d="M50 36 L63.3 45.7 L58.2 61.3 L41.8 61.3 L36.7 45.7 Z" fill="#1e6f5c"/><path d="M50 36 L50 6 M63.3 45.7 L88 27 M58.2 61.3 L74 84 M41.8 61.3 L26 84 M36.7 45.7 L12 27" stroke="#1e6f5c" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+      <h1>Parola noua</h1>
+    </div>
+    <div class="auth-card" id="card-recover">
+      <h2>Recuperare parola</h2>
+      <p class="sub">Foloseste codul de recuperare primit cand ti-ai facut contul. Daca nu il mai ai,
+        cere unul nou de la persoana care tine serverul pornit.</p>
+      <label>Utilizator sau email</label>
+      <input id="recId" autocomplete="username">
+      <label>Cod de recuperare</label>
+      <input id="recCode" placeholder="Ex: ABCD-2345-WXYZ" autocapitalize="characters">
+      <label>Parola noua (minim 8 caractere)</label>
+      <input id="recPwd" type="password" autocomplete="new-password">
+      <button class="btn" onclick="recoverPassword()">Schimba parola</button>
+      <button class="link" onclick="show('login')">Inapoi la autentificare</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= COD DE RECUPERARE ================= -->
+<div id="screen-code" class="screen">
+  <div class="auth-bg">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#ffffff"/><path d="M50 36 L63.3 45.7 L58.2 61.3 L41.8 61.3 L36.7 45.7 Z" fill="#1e6f5c"/></svg>
+      <h1>Noteaza codul</h1>
+    </div>
+    <div class="auth-card">
+      <h2 id="codeTitle">Contul a fost creat</h2>
+      <p class="sub">Acesta este codul tau de recuperare. Este singura cale de a-ti schimba parola
+        daca o uiti, iar aplicatia nu ti-l mai arata a doua oara. Fa o poza sau scrie-l undeva.</p>
+      <div class="code-box">
+        <span class="sub">Cod de recuperare</span>
+        <b id="codeValue"></b>
+      </div>
+      <button class="btn" onclick="copyCode()">Copiaza codul</button>
+      <button class="link" onclick="show('login')">L-am notat, mergi la autentificare</button>
     </div>
   </div>
 </div>
@@ -639,6 +1026,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
 <!-- ================= INREGISTRARE ================= -->
 <div id="screen-register" class="screen">
   <div class="auth-bg">
+    <button class="theme-btn auth-theme" onclick="toggleTheme()" title="Schimba tema"></button>
     <div class="brand">
       <svg class="logo" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="46" fill="#ffffff"/><path d="M50 36 L63.3 45.7 L58.2 61.3 L41.8 61.3 L36.7 45.7 Z" fill="#1e6f5c"/><path d="M50 36 L50 6 M63.3 45.7 L88 27 M58.2 61.3 L74 84 M41.8 61.3 L26 84 M36.7 45.7 L12 27" stroke="#1e6f5c" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
       <h1>Cont nou</h1>
@@ -646,6 +1034,15 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
     <div class="auth-card" id="card-register">
       <h2>Creeaza cont</h2>
       <p class="sub">Dupa crearea contului te vei autentifica cu utilizatorul sau emailul si parola.</p>
+      <label>Poza de profil (optional)</label>
+      <div class="pick">
+        <div class="ava" id="regAva"></div>
+        <div class="pick-btns">
+          <button type="button" onclick="document.getElementById('regAvaFile').click()">Alege din galerie</button>
+          <button type="button" onclick="clearRegAvatar()">Scoate poza</button>
+        </div>
+      </div>
+      <input id="regAvaFile" type="file" accept="image/*" style="display:none" onchange="pickRegAvatar(this)">
       <label>Utilizator</label>
       <input id="regUser" placeholder="Ex: ana.popescu">
       <label>Email</label>
@@ -674,7 +1071,14 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
         <p id="hello"></p>
       </div>
     </div>
-    <button class="out" onclick="logout()">Iesi</button>
+    <div class="head-right">
+      <button class="out bell" id="bell" onclick="openNotifications()" title="Notificari">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15V10a6 6 0 1 0-12 0v5l-1.5 2.5h15z"/><path d="M10 19a2 2 0 0 0 4 0"/></svg>
+        <span class="dot" id="bellDot">0</span>
+      </button>
+      <button class="out theme-btn" onclick="toggleTheme()" title="Schimba tema"></button>
+      <button class="out" onclick="logout()">Iesi</button>
+    </div>
   </header>
 
   <main>
@@ -779,18 +1183,56 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
       </div>
     </section>
 
-    <section class="section" id="sec-matches">
+    <section class="section" id="sec-rank">
+      <div class="card">
+        <h2>Clasament</h2>
+        <p class="hint">Top jucatori dupa puncte, pe fiecare sport. Poti filtra si pe zona.</p>
+        <div class="filters" id="rankSports"></div>
+        <label>Zona</label>
+        <select id="rankZone" onchange="loadRanking()"></select>
+      </div>
+      <div class="card">
+        <h2 id="rankTitle">Top jucatori</h2>
+        <div id="rankList"></div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-chats">
+      <div class="card">
+        <h2>Conversatiile tale</h2>
+        <p class="hint">Poti scrie doar jucatorilor cu care te-ai potrivit (v-ati apreciat reciproc).</p>
+        <div id="chatList"></div>
+      </div>
       <div class="card">
         <h2>Apreciaza un jucator</h2>
-        <p class="hint">Potrivire apare cand va apreciati reciproc.</p>
+        <p class="hint">Potrivirea apare cand va apreciati amandoi.</p>
         <label>Apreciezi</label>
         <select id="likeTo"></select>
         <button class="btn" onclick="like()">Apreciaza</button>
       </div>
+    </section>
+
+    <section class="section" id="sec-chat">
       <div class="card">
-        <h2>Potrivirile tale</h2>
-        <button class="btn accent" onclick="showMatches()">Arata potrivirile</button>
-        <div id="matches"></div>
+        <div class="chat-head">
+          <button class="back" onclick="go('chats', navBtn(3)); loadChats()">Inapoi</button>
+          <div class="ava" id="chatAva"></div>
+          <b id="chatName"></b>
+        </div>
+        <div class="thread" id="thread"></div>
+        <div class="send-row">
+          <input id="msgBody" maxlength="500" placeholder="Scrie un mesaj..."
+                 onkeydown="if (event.key === 'Enter') sendMessage()">
+          <button onclick="sendMessage()">Trimite</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-notif">
+      <div class="card">
+        <h2>Notificari</h2>
+        <p class="hint">Cand cineva te apreciaza sau cand va potriviti, afli aici.</p>
+        <div id="notifList"></div>
       </div>
     </section>
 
@@ -810,6 +1252,7 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
         <input id="teammates" placeholder="Separati prin virgula, sau gol">
         <label>Adversari</label>
         <input id="opponents" placeholder="Separati prin virgula">
+        <div class="calc" id="calc"></div>
         <button class="btn" onclick="recordMatch()">Inregistreaza meciul</button>
         <div id="recordResult" class="result-box"></div>
       </div>
@@ -819,11 +1262,31 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
   <button class="fab show" id="fab" onclick="openNewPost()" title="Anunt nou">+</button>
 
   <nav>
-    <button class="active" onclick="go('feed', this)">Anunturi</button>
-    <button onclick="go('search', this)">Cauta</button>
-    <button onclick="go('matches', this)">Potriviri</button>
-    <button onclick="go('record', this)">Meci</button>
-    <button onclick="openProfile(null, this)">Profil</button>
+    <button class="active" onclick="go('feed', this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h10M4 11h10M4 16h6"/><path d="M17 5h3v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2"/></svg>
+      <span>Anunturi</span>
+    </button>
+    <button onclick="openRanking(this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20v-6M12 20V5M19 20v-9"/><path d="M3 20h18"/></svg>
+      <span>Top</span>
+    </button>
+    <button onclick="go('search', this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+      <span>Cauta</span>
+    </button>
+    <button onclick="openChats(this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12.5c0 3.6-3.6 6.5-8 6.5a9.6 9.6 0 0 1-2.6-.35L5 20.5l1.2-3.2A6.3 6.3 0 0 1 4 12.5C4 8.9 7.6 6 12 6s8 2.9 8 6.5z"/></svg>
+      <span>Chat</span>
+      <span class="dot"></span>
+    </button>
+    <button onclick="openRecord(this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 5H4v2a3 3 0 0 0 3 3M17 5h3v2a3 3 0 0 1-3 3"/><path d="M12 14v3M9 20h6"/></svg>
+      <span>Meci</span>
+    </button>
+    <button onclick="openProfile(null, this)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5a7 7 0 0 1 14 0"/></svg>
+      <span>Profil</span>
+    </button>
   </nav>
 </div>
 
@@ -840,6 +1303,9 @@ let feedLoading = false;
 let feedSport = '';
 let viewingId = null;
 let draftAvatar = null;
+let regAvatar = '';
+let rankSport = '';
+let chatWith = null;
 const SPORT_FILTERS = ['toate', 'fotbal', 'baschet', 'tenis', 'volei', 'padel', 'alergare', 'badminton'];
 
 function esc(s) {
@@ -864,6 +1330,34 @@ function fail(e) {
     card.classList.add('shake');
     setTimeout(() => card.classList.remove('shake'), 500);
   }
+}
+
+/* ---------- tema deschisa / intunecata ---------- */
+const ICON_MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.2 8.2 0 1 0 10.5 10.5z"/></svg>';
+const ICON_SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.5 12h2M19.5 12h2M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5"/></svg>';
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('sm_theme', theme); } catch (e) { /* ignoram */ }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#101e1a' : '#1e6f5c');
+  document.querySelectorAll('.theme-btn').forEach(b => {
+    b.innerHTML = theme === 'dark' ? ICON_SUN : ICON_MOON;
+    b.setAttribute('aria-label', theme === 'dark' ? 'Treci pe tema deschisa' : 'Treci pe tema intunecata');
+  });
+}
+function toggleTheme() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  applyTheme(dark ? 'light' : 'dark');
+  showMsg(dark ? 'Tema deschisa' : 'Tema intunecata');
+}
+function startTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('sm_theme'); } catch (e) { /* ignoram */ }
+  if (!saved) {
+    saved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  applyTheme(saved);
 }
 
 function show(name) {
@@ -940,11 +1434,14 @@ async function register() {
     const j = await api('register', 'POST', {
       username: v('regUser'), email: v('regEmail'),
       password: document.getElementById('regPwd').value,
-      sports: v('regSports'), availability: v('regAvail'), zone: v('regZone')
+      sports: v('regSports'), availability: v('regAvail'), zone: v('regZone'),
+      avatar: regAvatar
     });
     document.getElementById('regPwd').value = '';
-    showMsg(j.message);
-    show('login');
+    regAvatar = '';
+    renderRegAvatar();
+    document.getElementById('loginId').value = v('regUser');
+    showCode(j.code, 'Contul a fost creat');
   } catch (e) { fail(e); }
 }
 
@@ -968,7 +1465,15 @@ async function enterApp() {
   renderFilters();
   resetFeed();
   loadPlayers();
+  refreshBadges();
 }
+
+/* verificam periodic mesajele si notificarile */
+setInterval(() => {
+  if (!token || !me) return;
+  if (document.getElementById('sec-chat').classList.contains('active')) loadThread(false);
+  else refreshBadges();
+}, 10000);
 
 async function logout() {
   try { await api('logout', 'POST'); } catch (e) { /* ignoram */ }
@@ -1023,19 +1528,8 @@ async function like() {
   try {
     const j = await api('like', 'POST', { to: v('likeTo') });
     showMsg(j.message);
-  } catch (e) { fail(e); }
-}
-
-async function showMatches() {
-  try {
-    const j = await api('matches');
-    const box = document.getElementById('matches');
-    box.innerHTML = j.items.length ? '' : '<div class="empty">Nu ai potriviri inca.</div>';
-    j.items.forEach(m => {
-      box.innerHTML += '<div class="item"><div class="name">' + esc(m.name) + '</div>' +
-        '<div class="meta"><span class="chip">' + esc(m.common) + '</span><br>' +
-        esc(m.zone) + ' · ' + esc(m.availability) + '</div></div>';
-    });
+    loadChats();
+    refreshBadges();
   } catch (e) { fail(e); }
 }
 
@@ -1046,8 +1540,9 @@ async function recordMatch() {
       teammates: v('teammates'), opponents: v('opponents')
     });
     document.getElementById('recordResult').textContent = j.message;
-    ['recordSport', 'teammates', 'opponents'].forEach(id => document.getElementById(id).value = '');
+    ['teammates', 'opponents'].forEach(id => document.getElementById(id).value = '');
     loadPlayers();
+    loadCalc();
   } catch (e) { fail(e); }
 }
 
@@ -1167,8 +1662,9 @@ async function publishPost() {
   } catch (e) { fail(e); }
 }
 
-/* incarcare la derulare (scroll infinit) */
+/* incarcare la derulare (scroll infinit), doar cand esti in aplicatie */
 window.addEventListener('scroll', () => {
+  if (!token || !document.getElementById('screen-app').classList.contains('active')) return;
   if (!document.getElementById('sec-feed').classList.contains('active')) return;
   const left = document.body.offsetHeight - (window.scrollY + window.innerHeight);
   if (left < 320) loadFeed();
@@ -1178,7 +1674,7 @@ window.addEventListener('scroll', () => {
 
 async function openProfile(id, btn) {
   viewingId = id || null;
-  go('profile', btn || navBtn(4));
+  go('profile', btn || navBtn(5));
   await loadProfile();
 }
 
@@ -1247,8 +1743,8 @@ function clearAvatar() {
   renderEditAvatar();
 }
 
-/* poza este micsorata in browser la 320x320 inainte de trimitere */
-function pickAvatar(input) {
+/* poza aleasa din galerie este decupata patrat si micsorata la 320x320 in browser */
+function readAvatar(input, done) {
   const file = input.files && input.files[0];
   input.value = '';
   if (!file) return;
@@ -1263,13 +1759,26 @@ function pickAvatar(input) {
       const side = Math.min(img.width, img.height);
       canvas.getContext('2d').drawImage(img,
         (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
-      draftAvatar = canvas.toDataURL('image/jpeg', 0.85);
-      renderEditAvatar();
+      done(canvas.toDataURL('image/jpeg', 0.85));
     };
     img.onerror = () => showMsg('Fisierul nu este o imagine valida.');
     img.src = reader.result;
   };
+  reader.onerror = () => showMsg('Nu am putut citi fisierul.');
   reader.readAsDataURL(file);
+}
+function pickAvatar(input) {
+  readAvatar(input, data => { draftAvatar = data; renderEditAvatar(); });
+}
+function pickRegAvatar(input) {
+  readAvatar(input, data => { regAvatar = data; renderRegAvatar(); });
+}
+function clearRegAvatar() {
+  regAvatar = '';
+  renderRegAvatar();
+}
+function renderRegAvatar() {
+  fillAva(document.getElementById('regAva'), v('regUser') || '?', regAvatar);
 }
 
 async function saveProfile() {
@@ -1287,9 +1796,245 @@ async function saveProfile() {
   } catch (e) { fail(e); }
 }
 
+/* ================= CAT VALOREAZA MECIUL ================= */
+
+let calcTimer = null;
+function openRecord(btn) {
+  go('record', btn || navBtn(4));
+  loadCalc();
+}
+function calcLater() {
+  clearTimeout(calcTimer);
+  calcTimer = setTimeout(loadCalc, 450);
+}
+
+async function loadCalc() {
+  const box = document.getElementById('calc');
+  const sport = v('recordSport');
+  if (!sport) {
+    box.innerHTML = '<p class="hint">Scrie sportul si numele jucatorilor ca sa vezi cat valoreaza meciul.</p>';
+    return;
+  }
+  try {
+    const j = await api('preview?sport=' + encodeURIComponent(sport) +
+      '&teammates=' + encodeURIComponent(v('teammates')) +
+      '&opponents=' + encodeURIComponent(v('opponents')));
+
+    const side = (title, list, extra) => {
+      if (!list.length) return '';
+      return '<div class="calc-side"><h3>' + title + '</h3>' + list.map(pl =>
+        '<div class="calc-line">' + avaHtml(pl.name, pl.avatar) +
+        '<span class="who">' + esc(pl.name) + (pl.self ? ' (tu)' : '') + '</span>' +
+        '<span class="lvl">' + esc(pl.level) + ' · ' + pl.points + ' p</span></div>').join('') +
+        (extra || '') + '</div>';
+    };
+
+    const mine = Object.assign({ self: true }, j.me);
+    box.innerHTML =
+      '<div class="calc-outcomes">' +
+        '<div class="won"><b>+' + j.win + '</b><span>daca castigi</span></div>' +
+        '<div class="lost"><b>' + j.loss + '</b><span>daca pierzi</span></div>' +
+      '</div>' +
+      '<div class="calc-avg"><span>Total acum: ' + j.ownPoints + ' p</span>' +
+        '<span>Victorie: ' + j.afterWin + ' p · Infrangere: ' + j.afterLoss + ' p</span></div>' +
+      side('Echipa ta', [mine].concat(j.team)) +
+      side('Adversari', j.opponents) +
+      '<div class="calc-avg"><span>Media coechipierilor: ' + levelName(j.teamAvg) + '</span>' +
+        '<span>Media adversarilor: ' + levelName(j.oppAvg) + '</span></div>' +
+      (j.unknown.length
+        ? '<p class="calc-warn">Nu am gasit la acest sport: ' + esc(j.unknown.join(', ')) +
+          '. Verifica numele, altfel nu intra in calcul.</p>'
+        : '') +
+      (j.opponents.length ? '' : '<p class="hint">Adauga adversari ca sa vezi calculul real.</p>');
+  } catch (e) {
+    box.innerHTML = '<p class="calc-warn">' + esc(e.message) + '</p>';
+  }
+}
+
+/* media de nivel, ca text: 0 = Incepator, 1 = Intermediar, 2 = Avansat */
+function levelName(avg) {
+  const names = ['Incepator', 'Intermediar', 'Avansat'];
+  const n = Number(avg);
+  return names[Math.round(n)] + ' (' + n.toFixed(1) + ')';
+}
+
+/* ================= CLASAMENT ================= */
+
+async function openRanking(btn) {
+  go('rank', btn || navBtn(1));
+  await loadRanking();
+}
+
+async function loadRanking() {
+  try {
+    const zone = document.getElementById('rankZone').value || '';
+    const j = await api('ranking?sport=' + encodeURIComponent(rankSport) +
+      '&zone=' + encodeURIComponent(zone));
+    rankSport = j.sport;
+
+    document.getElementById('rankSports').innerHTML = j.sports.length
+      ? j.sports.map(s => '<button class="' + (s === j.sport ? 'on' : '') + '" ' +
+          'onclick="setRankSport(' + "'" + esc(s) + "'" + ')">' + esc(s) + '</button>').join('')
+      : '<span class="empty">Niciun sport inca.</span>';
+
+    const sel = document.getElementById('rankZone');
+    if (sel.options.length !== j.zones.length + 1) {
+      sel.innerHTML = '<option value="">Toate zonele</option>' +
+        j.zones.map(z => '<option value="' + esc(z) + '">' + esc(z) + '</option>').join('');
+      sel.value = j.zone;
+    }
+
+    document.getElementById('rankTitle').textContent = 'Top ' + (j.sport || 'jucatori') +
+      (j.zone ? ' · ' + j.zone : '');
+
+    const box = document.getElementById('rankList');
+    box.innerHTML = j.items.length ? '' : '<div class="empty">Nimeni nu are puncte aici inca.</div>';
+    j.items.forEach(r => {
+      const medal = r.rank <= 3 ? ' top' + r.rank : '';
+      const mine = me && r.id === me.playerId ? ' me-row' : '';
+      box.innerHTML += '<div class="rank-row' + medal + mine + '">' +
+        '<span class="rank-no">' + r.rank + '</span>' + avaHtml(r.name, r.avatar) +
+        '<div class="rank-who"><b onclick="openProfile(' + r.id + ')">' + esc(r.name) + '</b>' +
+        '<span>' + esc(r.level) + ' · ' + esc(r.zone || 'fara zona') + ' · ' +
+        r.played + ' meciuri</span></div>' +
+        '<div class="rank-pts"><b>' + r.points + '</b><span>puncte</span></div></div>';
+    });
+  } catch (e) { fail(e); }
+}
+function setRankSport(sport) {
+  rankSport = sport;
+  loadRanking();
+}
+
+/* ================= CHAT ================= */
+
+async function openChats(btn) {
+  go('chats', btn || navBtn(3));
+  await loadChats();
+}
+
+async function loadChats() {
+  try {
+    const j = await api('chats');
+    const box = document.getElementById('chatList');
+    box.innerHTML = j.items.length ? ''
+      : '<div class="empty">Nu ai potriviri inca. Apreciaza jucatori si asteapta sa te aprecieze si ei.</div>';
+    j.items.forEach(c => {
+      const last = c.last ? esc(c.last) : 'Nicio discutie inca. Scrie primul mesaj.';
+      box.innerHTML += '<div class="chat-row" onclick="openChat(' + c.id + ')">' +
+        avaHtml(c.name, c.avatar) +
+        '<div class="chat-who"><b>' + esc(c.name) + '</b><span>' + last + '</span></div>' +
+        (c.unread ? '<span class="badge">' + c.unread + '</span>' : '') + '</div>';
+    });
+  } catch (e) { fail(e); }
+}
+
+async function openChat(id) {
+  chatWith = id;
+  go('chat', navBtn(3));
+  await loadThread(true);
+}
+
+async function loadThread(scroll) {
+  if (!chatWith) return;
+  try {
+    const j = await api('messages?with=' + chatWith);
+    fillAva(document.getElementById('chatAva'), j.with.name, j.with.avatar);
+    document.getElementById('chatName').textContent = j.with.name;
+    const box = document.getElementById('thread');
+    box.innerHTML = j.items.length ? ''
+      : '<div class="empty">Niciun mesaj inca. Propune un meci!</div>';
+    j.items.forEach(m => {
+      box.innerHTML += '<div class="bubble ' + (m.mine ? 'me' : 'them') + '">' + esc(m.body) +
+        '<small>' + esc(m.at) + '</small></div>';
+    });
+    if (scroll) box.scrollTop = box.scrollHeight;
+    refreshBadges();
+  } catch (e) { fail(e); }
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msgBody');
+  const body = input.value.trim();
+  if (!body) return;
+  try {
+    await api('message', 'POST', { to: chatWith, body: body });
+    input.value = '';
+    await loadThread(true);
+  } catch (e) { fail(e); }
+}
+
+/* ================= NOTIFICARI ================= */
+
+async function openNotifications() {
+  go('notif', null);
+  try {
+    const j = await api('notifications');
+    const box = document.getElementById('notifList');
+    box.innerHTML = j.items.length ? '' : '<div class="empty">Nicio notificare inca.</div>';
+    j.items.forEach(n => {
+      box.innerHTML += '<div class="notif' + (n.seen ? '' : ' fresh') + '">' +
+        avaHtml(n.name, n.avatar) +
+        '<div><b>' + esc(n.text) + '</b><span>' + esc(n.at) + '</span></div>' +
+        (n.otherId ? '<button class="back" onclick="openProfile(' + n.otherId + ')">Profil</button>' : '') +
+        '</div>';
+    });
+    await api('notifications', 'POST', {});
+    refreshBadges();
+  } catch (e) { fail(e); }
+}
+
+/* clopotelul si bulina de pe tabul Chat */
+async function refreshBadges() {
+  if (!token || !me) return;
+  try {
+    const j = await api('notifications');
+    const bell = document.getElementById('bell');
+    document.getElementById('bellDot').textContent = j.unseen > 9 ? '9+' : j.unseen;
+    bell.classList.toggle('on', j.unseen > 0);
+    navBtn(3).classList.toggle('has-new', j.unread > 0);
+  } catch (e) { /* ignoram, incercam data viitoare */ }
+}
+
+/* ================= RECUPERARE PAROLA ================= */
+
+async function recoverPassword() {
+  try {
+    const j = await api('recover', 'POST', {
+      identifier: v('recId'), code: v('recCode'),
+      password: document.getElementById('recPwd').value
+    });
+    document.getElementById('recPwd').value = '';
+    document.getElementById('recCode').value = '';
+    showCode(j.code, 'Parola a fost schimbata');
+    document.getElementById('loginId').value = v('recId');
+  } catch (e) { fail(e); }
+}
+
+function showCode(code, title) {
+  document.getElementById('codeValue').textContent = code;
+  document.getElementById('codeTitle').textContent = title;
+  show('code');
+}
+function copyCode() {
+  const code = document.getElementById('codeValue').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(
+      () => showMsg('Codul a fost copiat.'),
+      () => showMsg('Noteaza codul manual: ' + code));
+  } else {
+    showMsg('Noteaza codul manual: ' + code);
+  }
+}
+
 document.getElementById('editBio').addEventListener('input', updateBioCount);
+['recordSport', 'teammates', 'opponents'].forEach(id =>
+  document.getElementById(id).addEventListener('input', calcLater));
+document.getElementById('regUser').addEventListener('input', renderRegAvatar);
+renderRegAvatar();
 
 (async function init() {
+  startTheme();
   if (!token) { show('login'); return; }
   try { await enterApp(); } catch (e) { logoutLocal(); }
 })();
@@ -1367,6 +2112,7 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         }
         addColumn("players", "avatar", "TEXT NOT NULL DEFAULT ''");
         addColumn("players", "bio", "TEXT NOT NULL DEFAULT ''");
+        addColumn("users", "recovery_hash", "TEXT NOT NULL DEFAULT ''");
         seedDemoData();
     }
 
@@ -1497,6 +2243,7 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         switch (route) {
             case "POST /api/register": return register(p);
             case "POST /api/login": return login(p);
+            case "POST /api/recover": return recoverPassword(p);
             default: break;
         }
         // de aici incolo: doar cu sesiune valida
@@ -1514,11 +2261,18 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
             case "POST /api/like" -> like(me, p);
             case "GET /api/matches" -> matches(me);
             case "POST /api/match" -> recordMatch(me, p);
+            case "GET /api/preview" -> previewMatch(me, p);
             case "GET /api/profile" -> profileJson(me, p);
             case "POST /api/profile" -> updateProfile(me, p);
             case "GET /api/feed" -> feedJson(me, p);
             case "POST /api/post" -> addPost(me, p);
             case "POST /api/join" -> joinPost(me, p);
+            case "GET /api/ranking" -> ranking(p);
+            case "GET /api/chats" -> chats(me);
+            case "GET /api/messages" -> messages(me, p);
+            case "POST /api/message" -> sendMessage(me, p);
+            case "GET /api/notifications" -> notifications(me);
+            case "POST /api/notifications" -> markNotificationsSeen(me);
             default -> throw new IllegalArgumentException("Ruta necunoscuta.");
         };
     }
@@ -1543,6 +2297,7 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         String password = p.getOrDefault("password", "");
         String availability = p.getOrDefault("availability", "").trim();
         String zone = p.getOrDefault("zone", "").trim();
+        String avatar = checkAvatar(p.getOrDefault("avatar", ""));
 
         if (!username.matches("[A-Za-z0-9_.]{3,20}")) {
             throw new IllegalArgumentException("Utilizatorul trebuie sa aiba 3-20 caractere: litere, cifre, _ sau .");
@@ -1562,15 +2317,18 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
             throw new IllegalArgumentException("Exista deja un profil cu acest nume.");
         }
 
+        String code = recoveryCode();
         db.setAutoCommit(false);
         try {
-            exec("INSERT INTO players (name, availability, zone) VALUES (?, ?, ?)", username, availability, zone);
+            exec("INSERT INTO players (name, availability, zone, avatar) VALUES (?, ?, ?, ?)",
+                    username, availability, zone, avatar);
             int playerId = findPlayerByName(username).id();
             for (String s : sports) {
                 exec("INSERT INTO player_sports (player_id, sport, points) VALUES (?, ?, 0)", playerId, s);
             }
-            exec("INSERT INTO users (username, email, phone, password_hash, player_id) VALUES (?, ?, ?, ?, ?)",
-                    username, email, "", hashPassword(password), playerId);
+            exec("INSERT INTO users (username, email, phone, password_hash, player_id, recovery_hash) "
+                    + "VALUES (?, ?, ?, ?, ?, ?)",
+                    username, email, "", hashPassword(password), playerId, hashPassword(code));
             db.commit();
         } catch (SQLException e) {
             db.rollback();
@@ -1578,7 +2336,49 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         } finally {
             db.setAutoCommit(true);
         }
-        return ok("Contul a fost creat. Acum te poti autentifica.");
+        return "{\"ok\":true,\"message\":" + q("Contul a fost creat.") + ",\"code\":" + q(code) + "}";
+    }
+
+    /** Cod de recuperare, 12 caractere usor de citit, grupate cate 4. */
+    private static String recoveryCode() {
+        String alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 12; i++) {
+            if (i > 0 && i % 4 == 0) sb.append('-');
+            sb.append(alphabet.charAt(RND.nextInt(alphabet.length())));
+        }
+        return sb.toString();
+    }
+
+    /** Resetare parola cu codul primit la crearea contului. Codul se schimba dupa folosire. */
+    private static String recoverPassword(Map<String, String> p) throws SQLException {
+        String identifier = req(p, "identifier");
+        String code = req(p, "code").trim().toUpperCase();
+        String password = p.getOrDefault("password", "");
+        if (password.length() < 8) {
+            throw new IllegalArgumentException("Parola noua trebuie sa aiba cel putin 8 caractere.");
+        }
+
+        int userId = -1;
+        String stored = null;
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT id, recovery_hash FROM users WHERE username = ? OR email = ?")) {
+            ps.setString(1, identifier);
+            ps.setString(2, identifier);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    userId = rs.getInt(1);
+                    stored = rs.getString(2);
+                }
+            }
+        }
+        if (stored == null || stored.isEmpty() || !checkPassword(code, stored)) {
+            throw new IllegalArgumentException("Utilizatorul sau codul de recuperare nu sunt corecte.");
+        }
+        String fresh = recoveryCode();
+        exec("UPDATE users SET password_hash = ?, recovery_hash = ? WHERE id = ?",
+                hashPassword(password), hashPassword(fresh), userId);
+        return "{\"ok\":true,\"message\":" + q("Parola a fost schimbata.") + ",\"code\":" + q(fresh) + "}";
     }
 
 
@@ -1703,14 +2503,7 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
             exec("UPDATE players SET bio = ? WHERE id = ?", bio, me);
         }
         if (p.containsKey("avatar")) {
-            String avatar = p.get("avatar").trim();
-            if (!avatar.isEmpty() && !avatar.startsWith("data:image/")) {
-                throw new IllegalArgumentException("Poza de profil nu este o imagine valida.");
-            }
-            if (avatar.length() > 400_000) {
-                throw new IllegalArgumentException("Poza este prea mare. Alege o imagine mai mica.");
-            }
-            exec("UPDATE players SET avatar = ? WHERE id = ?", avatar, me);
+            exec("UPDATE players SET avatar = ? WHERE id = ?", checkAvatar(p.get("avatar")), me);
         }
         if (p.containsKey("zone")) exec("UPDATE players SET zone = ? WHERE id = ?", p.get("zone").trim(), me);
         if (p.containsKey("availability")) {
@@ -1811,6 +2604,19 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         return ok("Te-ai inscris la meci. Organizatorul te vede in lista.");
     }
 
+    /** Poza de profil: goala sau o imagine trimisa ca data URL, de cel mult 400 KB. */
+    private static String checkAvatar(String raw) {
+        String avatar = raw == null ? "" : raw.trim();
+        if (avatar.isEmpty()) return "";
+        if (!avatar.startsWith("data:image/")) {
+            throw new IllegalArgumentException("Poza de profil nu este o imagine valida.");
+        }
+        if (avatar.length() > 400_000) {
+            throw new IllegalArgumentException("Poza este prea mare. Alege o imagine mai mica.");
+        }
+        return avatar;
+    }
+
     private static int parseIntOr(String raw, int fallback) {
         try {
             return Integer.parseInt(raw == null ? "" : raw.trim());
@@ -1856,10 +2662,18 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         int to = intParam(p, "to");
         if (to == me) throw new IllegalArgumentException("Nu te poti aprecia pe tine.");
         Player target = playerById(to);
+        Player mine = playerById(me);
+        boolean isNew = scalarInt("SELECT COUNT(*) FROM likes WHERE from_id = ? AND to_id = ?", me, to) == 0;
         exec("INSERT OR IGNORE INTO likes (from_id, to_id) VALUES (?, ?)", me, to);
+
         if (isMutual(me, to)) {
-            return ok("Potrivire! Tu si " + target.name() + " va puteti contacta pentru un joc.");
+            if (isNew) {
+                notify(to, "match", me, "Potrivire cu " + mine.name() + "! Acum va puteti scrie.");
+                notify(me, "match", to, "Potrivire cu " + target.name() + "! Acum va puteti scrie.");
+            }
+            return ok("Potrivire! Tu si " + target.name() + " va puteti scrie din tabul Chat.");
         }
+        if (isNew) notify(to, "like", me, mine.name() + " te-a apreciat.");
         return ok("Aprecierea a fost salvata. Te vom anunta cand si celalalt apreciaza.");
     }
 
@@ -1907,6 +2721,81 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         if (newLevel > oldLevel) text += " Felicitari! Ai urcat la nivelul " + LEVELS[newLevel] + ".";
         if (newLevel < oldLevel) text += " Ai coborat la nivelul " + LEVELS[newLevel] + ".";
         return ok(text);
+    }
+
+    /**
+     * Cat valoreaza meciul inainte sa il joci: nivelul fiecarui jucator,
+     * media pe echipe si punctele castigate sau pierdute.
+     */
+    private static String previewMatch(int me, Map<String, String> p) throws SQLException {
+        String sport = p.getOrDefault("sport", "").trim().toLowerCase();
+        if (sport.isEmpty()) throw new IllegalArgumentException("Scrie sportul ca sa vezi calculul.");
+        if (!hasSport(me, sport)) {
+            throw new IllegalArgumentException("Sportul nu este in profilul tau. Adauga-l mai intai.");
+        }
+
+        List<String> unknown = new ArrayList<>();
+        List<Player> teammates = resolveSoft(p.getOrDefault("teammates", ""), me, sport, unknown);
+        List<Player> opponents = resolveSoft(p.getOrDefault("opponents", ""), me, sport, unknown);
+
+        int ownPoints = pointsOf(me, sport);
+        int ownLevel = levelFromPoints(ownPoints);
+        double teamAvg = teammates.isEmpty() ? ownLevel : averageLevel(teammates, sport);
+        double oppAvg = opponents.isEmpty() ? ownLevel : averageLevel(opponents, sport);
+        int win = computePoints(true, ownLevel, teamAvg, oppAvg);
+        int loss = computePoints(false, ownLevel, teamAvg, oppAvg);
+
+        return "{\"ok\":true,\"sport\":" + q(sport)
+                + ",\"me\":" + sideJson(playerById(me), sport)
+                + ",\"team\":" + sideListJson(teammates, sport)
+                + ",\"opponents\":" + sideListJson(opponents, sport)
+                + ",\"teamAvg\":" + num(teamAvg)
+                + ",\"oppAvg\":" + num(oppAvg)
+                + ",\"ownLevel\":" + ownLevel
+                + ",\"ownPoints\":" + ownPoints
+                + ",\"win\":" + win
+                + ",\"loss\":" + loss
+                + ",\"afterWin\":" + Math.max(0, ownPoints + win)
+                + ",\"afterLoss\":" + Math.max(0, ownPoints + loss)
+                + ",\"unknown\":" + jsonList(unknown) + ",\"message\":\"\"}";
+    }
+
+    private static String sideJson(Player pl, String sport) throws SQLException {
+        int points = pointsOf(pl.id(), sport);
+        return "{\"id\":" + pl.id() + ",\"name\":" + q(pl.name()) + ",\"avatar\":" + q(pl.avatar())
+                + ",\"points\":" + points + ",\"levelNo\":" + levelFromPoints(points)
+                + ",\"level\":" + q(LEVELS[levelFromPoints(points)]) + "}";
+    }
+
+    private static String sideListJson(List<Player> list, String sport) throws SQLException {
+        List<String> items = new ArrayList<>();
+        for (Player pl : list) items.add(sideJson(pl, sport));
+        return "[" + String.join(",", items) + "]";
+    }
+
+    /** Ca resolveNames, dar numele gresite sunt doar raportate, nu opresc calculul. */
+    private static List<Player> resolveSoft(String raw, int me, String sport, List<String> unknown)
+            throws SQLException {
+        List<Player> list = new ArrayList<>();
+        if (raw == null || raw.trim().isEmpty()) return list;
+        for (String n : raw.split(",")) {
+            String name = n.trim();
+            if (name.isEmpty()) continue;
+            Player pl = findPlayerByName(name);
+            if (pl == null || pl.id() == me || !hasSport(pl.id(), sport)) {
+                if (!unknown.contains(name)) unknown.add(name);
+                continue;
+            }
+            boolean duplicate = false;
+            for (Player x : list) if (x.id() == pl.id()) duplicate = true;
+            if (!duplicate) list.add(pl);
+        }
+        return list;
+    }
+
+    /** Numar zecimal cu punct, indiferent de setarile regionale. */
+    private static String num(double value) {
+        return String.format(Locale.US, "%.2f", value);
     }
 
     /** Jucatorii din lista; arunca eroare daca lista contine ceva invalid. */
@@ -1985,8 +2874,179 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
     }
 
     // =====================================================================
+    //  Clasament
+    // =====================================================================
+
+    /** Top jucatori la un sport, optional doar dintr-o zona. */
+    private static String ranking(Map<String, String> p) throws SQLException {
+        List<String> sports = textColumn("SELECT DISTINCT sport FROM player_sports ORDER BY sport");
+        List<String> zones = textColumn("SELECT DISTINCT zone FROM players WHERE zone <> '' ORDER BY zone");
+
+        String sport = p.getOrDefault("sport", "").trim().toLowerCase();
+        if (sport.isEmpty()) sport = sports.isEmpty() ? "" : sports.get(0);
+        String zone = p.getOrDefault("zone", "").trim();
+
+        List<String> items = new ArrayList<>();
+        String sql = "SELECT pl.id, pl.name, pl.avatar, pl.zone, s.points FROM player_sports s "
+                + "JOIN players pl ON pl.id = s.player_id WHERE s.sport = ?"
+                + (zone.isEmpty() ? "" : " AND pl.zone = ? COLLATE NOCASE")
+                + " ORDER BY s.points DESC, pl.name LIMIT 50";
+        try (PreparedStatement ps = db.prepareStatement(sql)) {
+            if (zone.isEmpty()) bind(ps, sport);
+            else bind(ps, sport, zone);
+            try (ResultSet rs = ps.executeQuery()) {
+                int rank = 0;
+                while (rs.next()) {
+                    rank++;
+                    int points = rs.getInt(5);
+                    items.add("{\"rank\":" + rank + ",\"id\":" + rs.getInt(1)
+                            + ",\"name\":" + q(rs.getString(2))
+                            + ",\"avatar\":" + q(rs.getString(3))
+                            + ",\"zone\":" + q(rs.getString(4))
+                            + ",\"points\":" + points
+                            + ",\"level\":" + q(LEVELS[levelFromPoints(points)])
+                            + ",\"played\":" + scalarInt(
+                                    "SELECT COUNT(*) FROM match_log WHERE player_id = ? AND sport = ?",
+                                    rs.getInt(1), sport)
+                            + "}");
+                }
+            }
+        }
+        return "{\"ok\":true,\"sport\":" + q(sport) + ",\"zone\":" + q(zone)
+                + ",\"sports\":" + jsonList(sports) + ",\"zones\":" + jsonList(zones)
+                + ",\"items\":[" + String.join(",", items) + "],\"message\":\"\"}";
+    }
+
+    // =====================================================================
+    //  Mesaje intre jucatorii potriviti
+    // =====================================================================
+
+    /** Conversatiile mele: doar cu jucatorii cu care m-am potrivit. */
+    private static String chats(int me) throws SQLException {
+        List<String> items = new ArrayList<>();
+        for (Player o : matchesFor(me)) {
+            String last = "";
+            String lastAt = "";
+            try (PreparedStatement ps = db.prepareStatement(
+                    "SELECT body, created_at FROM messages "
+                            + "WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?) "
+                            + "ORDER BY id DESC LIMIT 1")) {
+                bind(ps, me, o.id(), o.id(), me);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) {
+                        last = rs.getString(1);
+                        lastAt = rs.getString(2);
+                    }
+                }
+            }
+            int unread = scalarInt(
+                    "SELECT COUNT(*) FROM messages WHERE from_id = ? AND to_id = ? AND seen = 0", o.id(), me);
+            items.add("{\"id\":" + o.id() + ",\"name\":" + q(o.name()) + ",\"avatar\":" + q(o.avatar())
+                    + ",\"zone\":" + q(o.zone()) + ",\"availability\":" + q(o.availability())
+                    + ",\"last\":" + q(last) + ",\"lastAt\":" + q(lastAt) + ",\"unread\":" + unread + "}");
+        }
+        return okItems(items);
+    }
+
+    /** Mesajele dintr-o conversatie; cele primite sunt marcate ca citite. */
+    private static String messages(int me, Map<String, String> p) throws SQLException {
+        int other = intParam(p, "with");
+        requireMatch(me, other);
+        exec("UPDATE messages SET seen = 1 WHERE from_id = ? AND to_id = ?", other, me);
+
+        List<String> items = new ArrayList<>();
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT id, from_id, body, created_at FROM messages "
+                        + "WHERE (from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?) "
+                        + "ORDER BY id")) {
+            bind(ps, me, other, other, me);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    items.add("{\"id\":" + rs.getInt(1) + ",\"mine\":" + (rs.getInt(2) == me)
+                            + ",\"body\":" + q(rs.getString(3))
+                            + ",\"at\":" + q(rs.getString(4)) + "}");
+                }
+            }
+        }
+        Player o = playerById(other);
+        return "{\"ok\":true,\"with\":{\"id\":" + o.id() + ",\"name\":" + q(o.name())
+                + ",\"avatar\":" + q(o.avatar()) + "},\"items\":[" + String.join(",", items)
+                + "],\"message\":\"\"}";
+    }
+
+    private static String sendMessage(int me, Map<String, String> p) throws SQLException {
+        int other = intParam(p, "to");
+        requireMatch(me, other);
+        String body = req(p, "body");
+        if (body.length() > 500) throw new IllegalArgumentException("Mesajul poate avea cel mult 500 caractere.");
+        exec("INSERT INTO messages (from_id, to_id, body) VALUES (?, ?, ?)", me, other, body);
+        return ok("Mesaj trimis.");
+    }
+
+    private static void requireMatch(int me, int other) throws SQLException {
+        if (other == me) throw new IllegalArgumentException("Nu iti poti scrie tie.");
+        if (!isMutual(me, other)) {
+            throw new IllegalArgumentException("Puteti vorbi doar dupa ce va apreciati reciproc.");
+        }
+    }
+
+    // =====================================================================
+    //  Notificari
+    // =====================================================================
+
+    private static void notify(int playerId, String kind, int otherId, String text) throws SQLException {
+        exec("INSERT INTO notifications (player_id, kind, other_id, text) VALUES (?, ?, ?, ?)",
+                playerId, kind, otherId, text);
+    }
+
+    private static String notifications(int me) throws SQLException {
+        List<String> items = new ArrayList<>();
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT n.id, n.kind, n.other_id, n.text, n.seen, n.created_at, "
+                        + "COALESCE(pl.name, ''), COALESCE(pl.avatar, '') FROM notifications n "
+                        + "LEFT JOIN players pl ON pl.id = n.other_id "
+                        + "WHERE n.player_id = ? ORDER BY n.id DESC LIMIT 50")) {
+            ps.setInt(1, me);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    items.add("{\"id\":" + rs.getInt(1) + ",\"kind\":" + q(rs.getString(2))
+                            + ",\"otherId\":" + rs.getInt(3) + ",\"text\":" + q(rs.getString(4))
+                            + ",\"seen\":" + (rs.getInt(5) == 1) + ",\"at\":" + q(rs.getString(6))
+                            + ",\"name\":" + q(rs.getString(7)) + ",\"avatar\":" + q(rs.getString(8)) + "}");
+                }
+            }
+        }
+        int unseen = scalarInt("SELECT COUNT(*) FROM notifications WHERE player_id = ? AND seen = 0", me);
+        int unread = scalarInt("SELECT COUNT(*) FROM messages WHERE to_id = ? AND seen = 0", me);
+        return "{\"ok\":true,\"items\":[" + String.join(",", items) + "],\"unseen\":" + unseen
+                + ",\"unread\":" + unread + ",\"message\":\"\"}";
+    }
+
+    private static String markNotificationsSeen(int me) throws SQLException {
+        exec("UPDATE notifications SET seen = 1 WHERE player_id = ?", me);
+        return ok("");
+    }
+
+    // =====================================================================
     //  Ajutoare HTTP / JSON
     // =====================================================================
+
+    private static List<String> textColumn(String sql, Object... args) throws SQLException {
+        List<String> out = new ArrayList<>();
+        try (PreparedStatement ps = db.prepareStatement(sql)) {
+            bind(ps, args);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) out.add(rs.getString(1));
+            }
+        }
+        return out;
+    }
+
+    private static String jsonList(List<String> values) {
+        List<String> quoted = new ArrayList<>();
+        for (String v : values) quoted.add(q(v));
+        return "[" + String.join(",", quoted) + "]";
+    }
 
     private static String req(Map<String, String> p, String key) {
         String v = p.getOrDefault(key, "").trim();
@@ -2155,8 +3215,28 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         JButton stop = new JButton("Opreste serverul");
         stop.addActionListener(e -> System.exit(0));
 
+        JButton recovery = new JButton("Cod de recuperare pentru un cont");
+        recovery.addActionListener(e -> {
+            String who = JOptionPane.showInputDialog(f,
+                    "Utilizatorul sau emailul contului care si-a uitat parola:",
+                    "SportMatch", JOptionPane.QUESTION_MESSAGE);
+            if (who == null || who.trim().isEmpty()) return;
+            try {
+                String code = issueRecoveryCode(who.trim());
+                JOptionPane.showMessageDialog(f,
+                        "Cod nou pentru " + who.trim() + ":\n\n" + code
+                                + "\n\nDa-i acest cod proprietarului contului.\n"
+                                + "Il foloseste in aplicatie la \"Ai uitat parola?\".\n"
+                                + "Codul vechi nu mai este valabil.",
+                        "SportMatch", JOptionPane.INFORMATION_MESSAGE);
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(f, ex.getMessage(), "SportMatch", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
         JPanel center = new JPanel(new GridLayout(0, 1, 0, 10));
         center.add(info);
+        center.add(recovery);
 
         JPanel p = new JPanel(new BorderLayout(12, 12));
         p.setBorder(BorderFactory.createEmptyBorder(16, 16, 16, 16));
@@ -2167,6 +3247,15 @@ document.getElementById('editBio').addEventListener('input', updateBioCount);
         f.pack();
         f.setLocationRelativeTo(null);
         f.setVisible(true);
+    }
+
+    /** Cod nou de recuperare pentru un cont existent, generat din fereastra serverului. */
+    private static String issueRecoveryCode(String identifier) throws SQLException {
+        int userId = scalarInt("SELECT id FROM users WHERE username = ? OR email = ?", identifier, identifier);
+        if (userId == 0) throw new IllegalArgumentException("Nu exista un cont cu \"" + identifier + "\".");
+        String code = recoveryCode();
+        exec("UPDATE users SET recovery_hash = ? WHERE id = ?", hashPassword(code), userId);
+        return code;
     }
 
     private static String localIp() {
