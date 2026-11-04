@@ -8,10 +8,14 @@ import java.awt.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.sql.*;
+import java.time.Duration;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -97,6 +101,20 @@ public class SportMatch {
         CREATE TABLE IF NOT EXISTS meta (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL)
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS geo_cache (
+            key  TEXT PRIMARY KEY,
+            lat  REAL NOT NULL,
+            lon  REAL NOT NULL,
+            addr TEXT NOT NULL DEFAULT '')
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS route_cache (
+            key     TEXT PRIMARY KEY,
+            km      REAL NOT NULL,
+            minutes INTEGER NOT NULL,
+            coords  TEXT NOT NULL DEFAULT '[]')
         """,
         """
         CREATE TABLE IF NOT EXISTS messages (
@@ -199,8 +217,7 @@ public class SportMatch {
          "Daca ploua, mutam meciul in sala de langa. Anunt cu o ora inainte."}
     };
 
-    /** Pagina web (login, inregistrare si aplicatia). */
-    private static final String PAGE = """
+    private static final String PAGE_HEAD = """
 <!DOCTYPE html>
 <html lang="ro">
 <head>
@@ -208,6 +225,8 @@ public class SportMatch {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1e6f5c">
 <title>SportMatch</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root {
   --main: #1e6f5c;
@@ -717,6 +736,98 @@ textarea:focus { outline: none; border-color: var(--main); box-shadow: 0 0 0 3px
 }
 .fab.show { display: block; }
 
+/* ---------- harta si traseul ---------- */
+.mapbox {
+  position: relative;
+  z-index: 0;
+  height: 270px;
+  margin: 10px 0 12px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.mapbox .empty { padding: 36px 14px; }
+.leaflet-container { font: inherit; background: var(--soft); }
+.trip-nums { display: flex; gap: 8px; margin: 10px 0 4px; }
+.trip-nums div {
+  flex: 1;
+  background: var(--soft);
+  border-radius: 14px;
+  padding: 10px 6px;
+  text-align: center;
+}
+.trip-nums b { display: block; font-size: 20px; color: var(--soft-text); }
+.trip-nums span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.trip-line { font-size: 13px; color: var(--body-text); margin: 6px 0; line-height: 1.45; }
+.trip-line b { color: var(--soft-text); }
+.trip-warn { font-size: 13px; color: #c0392b; margin: 6px 0 0; }
+.map-btn {
+  border: 1px solid var(--main);
+  background: var(--card);
+  color: var(--main);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.map-btn:hover { background: var(--soft); }
+
+
+.modes { display: flex; gap: 8px; margin: 10px 0 2px; }
+.mode {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 9px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mode.on { background: var(--main); color: #fff; border-color: var(--main); }
+.nav-live { display: none; }
+.nav-live.on { display: block; }
+.nav-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--main);
+  color: #fff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.nav-arrow { font-size: 30px; line-height: 1; }
+.nav-body { flex: 1; min-width: 0; }
+.nav-dist { font-size: 22px; font-weight: 700; white-space: nowrap; }
+.nav-text { font-size: 14px; line-height: 1.35; overflow-wrap: anywhere; }
+.nav-nums { display: flex; gap: 8px; margin-bottom: 10px; }
+.nav-nums div {
+  flex: 1;
+  background: var(--soft);
+  border-radius: 14px;
+  padding: 9px 4px;
+  text-align: center;
+}
+.nav-nums div { min-width: 0; }
+.nav-nums b { display: block; font-size: 17px; color: var(--soft-text); }
+.nav-nums span { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.nav-apps { display: flex; gap: 8px; margin-top: 10px; }
+.nav-apps a { flex: 1; text-align: center; text-decoration: none; padding: 9px 6px; }
+.me-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2176ff;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(33, 118, 255, 0.5);
+}
+
 /* ---------- clasament ---------- */
 .rank-row {
   display: flex;
@@ -952,6 +1063,9 @@ nav button.has-new .dot { display: block; }
   word-break: break-all;
 }
 </style>
+        """;
+
+    private static final String PAGE_BODY = """
 </head>
 <body>
 
@@ -1108,6 +1222,55 @@ nav button.has-new .dot { display: block; }
         <textarea id="postBody" maxlength="600" placeholder="Nivel, cost teren, ce aduci cu tine..."></textarea>
         <button class="btn" onclick="publishPost()">Publica anuntul</button>
         <button class="link" onclick="go('feed', navBtn(0))">Renunta</button>
+      </div>
+    </section>
+
+    <!-- ---------- harta terenului si traseul pana la el ---------- -->
+    <section class="section" id="sec-map">
+      <div class="card">
+        <h2 id="mapTitle">Harta terenului</h2>
+        <p class="hint" id="mapWhen"></p>
+        <div class="modes">
+          <button class="mode on" id="modeCar" onclick="setMode('masina')">Cu masina</button>
+          <button class="mode" id="modeFoot" onclick="setMode('jos')">Pe jos</button>
+        </div>
+        <div class="nav-live" id="navLive">
+          <div class="nav-step">
+            <div class="nav-arrow" id="navArrow">^</div>
+            <div class="nav-body">
+              <div class="nav-dist" id="navDist">--</div>
+              <div class="nav-text" id="navText">Pornim...</div>
+            </div>
+          </div>
+          <div class="nav-nums">
+            <div><b id="navLeft">--</b><span>ramas</span></div>
+            <div><b id="navEta">--</b><span>ajungi la</span></div>
+            <div><b id="navSpeed">--</b><span>km/h</span></div>
+          </div>
+        </div>
+        <div class="mapbox" id="mapBox"></div>
+        <div id="mapTrip"></div>
+        <div id="navTools" class="nav-live">
+          <div class="row">
+            <button class="btn" onclick="stopNav()">Opreste navigarea</button>
+            <button class="btn ghost" onclick="recenterNav()">Centreaza</button>
+          </div>
+          <div class="nav-apps">
+            <a class="map-btn" id="navWaze" target="_blank" rel="noopener">Deschide in Waze</a>
+            <a class="map-btn" id="navGmaps" target="_blank" rel="noopener">Google Maps</a>
+          </div>
+        </div>
+        <div id="mapForm">
+          <label>De unde pleci</label>
+          <input id="mapFrom" placeholder="Ex: Strada Lipovei 20, Timisoara">
+          <div class="row">
+            <button class="btn" onclick="routeFromText()">Vezi traseul</button>
+            <button class="btn ghost" onclick="routeFromGps()">Locatia mea</button>
+          </div>
+          <button class="btn accent" onclick="startNav()">Navigheaza spre teren</button>
+          <button class="link" onclick="saveStart()">Salveaza plecarea ca implicita</button>
+          <button class="link" onclick="go('feed', navBtn(0))">Inapoi la anunturi</button>
+        </div>
       </div>
     </section>
 
@@ -1292,6 +1455,9 @@ nav button.has-new .dot { display: block; }
 
 <div id="msg" class="toast"></div>
 
+        """;
+
+    private static final String PAGE_JS = """
 <script>
 let token = localStorage.getItem('sm_token') || '';
 let me = null;
@@ -1368,6 +1534,7 @@ function navBtn(i) {
   return document.querySelectorAll('nav button')[i];
 }
 function go(name, btn) {
+  if (name !== 'map' && navOn) stopNav();
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-' + name).classList.add('active');
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1617,7 +1784,9 @@ function postHtml(p) {
     '<div class="post-meta"><span>' + esc(p.when) + '</span><span>' + esc(p.place) + '</span>' +
       '<span>' + esc(slots) + '</span></div>' +
     '<div class="post-foot"><span class="who" id="joined-' + p.id + '">' +
-      joinedText(p.joined) + '</span>' + btn + '</div></div>';
+      joinedText(p.joined) + '</span>' +
+      '<button class="map-btn" onclick="openMap(' + p.id + ')">Harta</button>' +
+      btn + '</div></div>';
 }
 function joinedText(n) {
   if (!n) return 'Nimeni inscris inca';
@@ -1636,6 +1805,410 @@ async function joinPost(id, btn) {
       const n = Math.max(0, (parseInt(label.textContent, 10) || 0) + (on ? 1 : -1));
       label.textContent = joinedText(n);
     }
+  } catch (e) { fail(e); }
+}
+
+
+/* ---------- harta terenului, plecarea si traseul ----------
+   Datele vin de la serverul nostru, care la rand intreaba
+   Nominatim (adresa <-> coordonate) si OSRM (traseul). */
+let mapView = null;
+let mapLayers = [];
+let mapPost = 0;
+let mapMode = 'masina';
+
+function openMap(id) {
+  mapPost = id;
+  go('map', null);
+  document.getElementById('mapTitle').textContent = 'Harta terenului';
+  document.getElementById('mapWhen').textContent = '';
+  document.getElementById('mapTrip').innerHTML = '<div class="trip-line">Se incarca harta...</div>';
+  loadMap('');
+}
+
+async function loadMap(extra) {
+  try {
+    const j = await api('map?post=' + mapPost + '&mode=' + mapMode + (extra || ''));
+    document.getElementById('mapTitle').textContent = j.title;
+    document.getElementById('mapWhen').textContent = j.when + ' · ' + j.place;
+    if (j.from) document.getElementById('mapFrom').value = j.from.addr;
+    drawMap(j);
+    let html = '<div class="trip-line"><b>Teren:</b> ' + esc(j.dest.addr) + '</div>';
+    if (j.from && j.trip) {
+      html = '<div class="trip-nums"><div><b>' + Number(j.trip.km).toFixed(1) + ' km</b>' +
+        '<span>distanta</span></div>' +
+        (j.trip.minutes ? '<div><b>' + j.trip.minutes + ' min</b><span>' +
+          (mapMode === 'jos' ? 'pe jos' : 'cu masina') + '</span></div>' : '') +
+        '</div>' + html +
+        '<div class="trip-line"><b>Plecare:</b> ' + esc(j.from.addr) + '</div>';
+    } else {
+      html += '<div class="trip-line">Scrie de unde pleci si vezi traseul si cat faci pana la teren.</div>';
+    }
+    if (j.note) html += '<div class="trip-warn">' + esc(j.note) + '</div>';
+    document.getElementById('mapTrip').innerHTML = html;
+  } catch (e) {
+    document.getElementById('mapTrip').innerHTML = '';
+    fail(e);
+  }
+}
+
+function drawMap(j) {
+  const box = document.getElementById('mapBox');
+  if (typeof L === 'undefined') {
+    box.innerHTML = '<div class="empty">Harta are nevoie de internet ca sa se incarce. ' +
+      'Distanta si traseul se vad mai jos.</div>';
+    return;
+  }
+  if (!mapView) {
+    mapView = L.map('mapBox', { scrollWheelZoom: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: 'Harta: OpenStreetMap'
+    }).addTo(mapView);
+    mapView.on('dragstart', () => { navFollow = false; });
+  }
+  mapLayers.forEach(layer => mapView.removeLayer(layer));
+  mapLayers = [];
+  const dest = [j.dest.lat, j.dest.lon];
+  mapLayers.push(L.marker(dest).addTo(mapView).bindPopup('Teren: ' + j.place));
+  if (j.from) {
+    const from = [j.from.lat, j.from.lon];
+    mapLayers.push(L.marker(from).addTo(mapView).bindPopup('Plecare: ' + j.from.addr));
+    const line = ((j.trip && j.trip.coords) || []).map(c => [c[1], c[0]]);
+    if (line.length > 1) {
+      mapLayers.push(L.polyline(line, { color: '#1e6f5c', weight: 5, opacity: 0.85 }).addTo(mapView));
+      mapView.fitBounds(L.latLngBounds(line).pad(0.15));
+    } else {
+      mapView.fitBounds(L.latLngBounds([from, dest]).pad(0.3));
+    }
+  } else {
+    mapView.setView(dest, 15);
+  }
+  setTimeout(() => mapView.invalidateSize(), 120);
+}
+
+
+/* ---------- navigare in timp real, ca in aplicatiile de drum ----------
+   Telefonul da pozitia (watchPosition), noi o desenam pe harta si cerem
+   de la server un traseu proaspat cu virajele pana la teren. */
+let navWatch = null;
+let navOn = false;
+let navSteps = [];
+let navIndex = 0;
+let navDest = null;
+let navPts = [];
+let navCum = [];
+let navTotalKm = 0;
+let navTotalMin = 0;
+let navRemainKm = 0;
+let navRemainMin = 0;
+let navLastFix = null;
+let navLastAsk = 0;
+let navFollow = true;
+let navSpoken = {};
+let navMe = null;
+let navRing = null;
+let navLine = null;
+let navWakeLock = null;
+
+const NAV_ARROWS = {
+  left: '<', right: '>', 'slight left': '<', 'slight right': '>',
+  'sharp left': '<', 'sharp right': '>', straight: '^', uturn: 'U'
+};
+
+function startNav() {
+  if (!navigator.geolocation) {
+    showMsg('Dispozitivul nu da acces la locatie.');
+    return;
+  }
+  if (navOn) return;
+  navOn = true;
+  navSteps = [];
+  navPts = [];
+  navCum = [];
+  navIndex = 0;
+  navSpoken = {};
+  navLastFix = null;
+  navLastAsk = 0;
+  navFollow = true;
+  document.getElementById('navLive').classList.add('on');
+  document.getElementById('navTools').classList.add('on');
+  document.getElementById('mapForm').style.display = 'none';
+  document.getElementById('mapTrip').style.display = 'none';
+  document.getElementById('mapTitle').textContent = 'Navigare spre teren';
+  setNavStep('^', '', 'Astept semnalul GPS...');
+  keepAwake();
+  navWatch = navigator.geolocation.watchPosition(onNavFix, onNavError,
+    { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+
+function stopNav() {
+  navOn = false;
+  if (navWatch !== null) navigator.geolocation.clearWatch(navWatch);
+  navWatch = null;
+  navSteps = [];
+  if (navWakeLock) { navWakeLock.release().catch(() => {}); navWakeLock = null; }
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  const live = document.getElementById('navLive');
+  if (live) {
+    live.classList.remove('on');
+    document.getElementById('navTools').classList.remove('on');
+    document.getElementById('mapForm').style.display = '';
+    document.getElementById('mapTrip').style.display = '';
+  }
+  if (mapView) {
+    [navMe, navRing, navLine].forEach(layer => { if (layer) mapView.removeLayer(layer); });
+  }
+  navMe = navRing = navLine = null;
+}
+
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator) navWakeLock = await navigator.wakeLock.request('screen');
+  } catch (e) { /* merge si fara, doar ca se stinge ecranul */ }
+}
+
+function onNavError(err) {
+  showMsg(err.code === 1
+    ? 'Nu ai dat voie la locatie. Permite-o din setarile browserului.'
+    : 'Nu primesc semnal GPS. Iesi in aer liber si incearca iar.');
+}
+
+async function onNavFix(pos) {
+  if (!navOn) return;
+  const here = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+  drawMe(here, pos.coords.accuracy);
+  if (navFollow && mapView) mapView.setView([here.lat, here.lon], Math.max(mapView.getZoom(), 16));
+
+  const speed = pos.coords.speed;
+  document.getElementById('navSpeed').textContent =
+    (speed === null || isNaN(speed)) ? '--' : Math.round(speed * 3.6);
+
+  navLastFix = here;
+
+  const now = Date.now();
+  const old = now - navLastAsk > 25000;
+  const away = navSteps.length > 0 && offRoute(here) > 0.08;
+  if (!navSteps.length || old || away) {
+    navLastAsk = now;
+    await askRoute(here);
+  }
+  updateStep(here);
+}
+
+/* traseul proaspat de la server, cu virajele de pe drum */
+async function askRoute(here) {
+  try {
+    const j = await api('nav?post=' + mapPost + '&mode=' + mapMode +
+      '&lat=' + here.lat + '&lon=' + here.lon);
+    navDest = j.dest;
+    if (j.arrived) { arrived(); return; }
+    navPts = (j.trip.coords || []).map(c => ({ lat: c[1], lon: c[0] }));
+    navCum = [0];
+    for (let i = 1; i < navPts.length; i++) {
+      navCum[i] = navCum[i - 1] + kmBetween(navPts[i - 1], navPts[i]);
+    }
+    navTotalKm = Number(j.trip.km);
+    navTotalMin = j.trip.minutes;
+    navSteps = (j.trip.steps || []).map(st => Object.assign({}, st, { vi: nearestVertex(st) }));
+    navIndex = navSteps.length > 1 ? 1 : 0;
+    navRemainKm = navTotalKm;
+    navRemainMin = navTotalMin;
+    showRemaining();
+    drawNavLine(j.trip.coords);
+    setLinks();
+  } catch (e) {
+    document.getElementById('navText').textContent = 'Nu am putut lua traseul. Incerc din nou.';
+  }
+}
+
+function drawMe(here, accuracy) {
+  if (!mapView || typeof L === 'undefined') return;
+  const point = [here.lat, here.lon];
+  if (!navMe) {
+    navMe = L.marker(point, {
+      icon: L.divIcon({ className: '', html: '<div class="me-dot"></div>', iconSize: [18, 18] })
+    }).addTo(mapView);
+    navRing = L.circle(point, { radius: accuracy || 20, color: '#2176ff', weight: 1, opacity: 0.5,
+      fillOpacity: 0.12 }).addTo(mapView);
+  } else {
+    navMe.setLatLng(point);
+    navRing.setLatLng(point).setRadius(accuracy || 20);
+  }
+}
+
+function drawNavLine(coords) {
+  if (!mapView || typeof L === 'undefined') return;
+  const line = (coords || []).map(c => [c[1], c[0]]);
+  if (navLine) mapView.removeLayer(navLine);
+  navLine = line.length > 1
+    ? L.polyline(line, { color: '#2176ff', weight: 6, opacity: 0.8 }).addTo(mapView)
+    : null;
+}
+
+/* cat de departe sunt de traseul desenat, in km */
+function offRoute(here) {
+  if (!navPts.length) return 0;
+  let best = 999;
+  navPts.forEach(pt => { best = Math.min(best, kmBetween(here, pt)); });
+  return best;
+}
+
+/* punctul de pe traseu cel mai apropiat de o pozitie */
+function nearestVertex(point) {
+  let best = 0;
+  let bestKm = 999;
+  for (let i = 0; i < navPts.length; i++) {
+    const d = kmBetween(point, navPts[i]);
+    if (d < bestKm) { bestKm = d; best = i; }
+  }
+  return best;
+}
+
+/* virajul care urmeaza si cati metri mai sunt pana la el */
+function updateStep(here) {
+  if (!navSteps.length || !navPts.length) return;
+  const vi = nearestVertex(here);
+
+  /* urmatorul viraj e primul care vine dupa punctul in care sunt acum */
+  let next = navSteps.findIndex(st => st.vi > vi);
+  if (next < 0) next = navSteps.length - 1;
+  navIndex = next;
+  const step = navSteps[next];
+  const meters = kmBetween(here, step) * 1000;
+
+  /* cat mai am de mers: restul traseului de la punctul curent incolo */
+  const total = navCum[navCum.length - 1] || navTotalKm;
+  navRemainKm = Math.max(0, total - (navCum[vi] || 0));
+  navRemainMin = navTotalKm > 0
+    ? Math.max(navRemainKm > 0.05 ? 1 : 0, Math.round(navTotalMin * navRemainKm / navTotalKm))
+    : 0;
+  showRemaining();
+
+  if (next === navSteps.length - 1 && meters < 60) { arrived(); return; }
+  setNavStep(NAV_ARROWS[step.modifier] || '^', metersText(meters), step.text);
+  speakStep(next, meters, step.spoken || step.text);
+}
+
+function setNavStep(arrow, distance, text) {
+  document.getElementById('navArrow').textContent = arrow;
+  document.getElementById('navDist').textContent = distance;
+  document.getElementById('navText').textContent = text;
+}
+
+function metersText(meters) {
+  if (meters >= 1000) return (meters / 1000).toFixed(1) + ' km';
+  return Math.round(meters / 10) * 10 + ' m';
+}
+
+function showRemaining() {
+  document.getElementById('navLeft').textContent = navRemainKm.toFixed(1) + ' km';
+  const eta = new Date(Date.now() + navRemainMin * 60000);
+  document.getElementById('navEta').textContent =
+    String(eta.getHours()).padStart(2, '0') + ':' + String(eta.getMinutes()).padStart(2, '0');
+}
+
+/* indicatia se spune cu voce tare o data de departe si o data aproape */
+function speakStep(index, meters, text) {
+  if (!window.speechSynthesis) return;
+  const far = index + ':departe';
+  const near = index + ':aproape';
+  if (meters < 350 && meters > 120 && !navSpoken[far]) {
+    navSpoken[far] = true;
+    say('Peste ' + metersText(meters) + ', ' + text);
+  } else if (meters <= 120 && !navSpoken[near]) {
+    navSpoken[near] = true;
+    say(text);
+  }
+}
+
+function say(text) {
+  try {
+    const voice = new SpeechSynthesisUtterance(text);
+    voice.lang = 'ro-RO';
+    speechSynthesis.speak(voice);
+  } catch (e) { /* unele browsere nu au voce */ }
+}
+
+function arrived() {
+  setNavStep('*', '', 'Ai ajuns la teren. Joc frumos!');
+  document.getElementById('navLeft').textContent = '0 km';
+  document.getElementById('navEta').textContent = 'acum';
+  say('Ai ajuns la teren.');
+  navSteps = [];
+}
+
+function recenterNav() {
+  navFollow = true;
+  if (mapView && navLastFix) mapView.setView([navLastFix.lat, navLastFix.lon], 16);
+}
+
+function setLinks() {
+  if (!navDest) return;
+  const point = navDest.lat + ',' + navDest.lon;
+  document.getElementById('navWaze').href = 'https://waze.com/ul?ll=' + point + '&navigate=yes';
+  document.getElementById('navGmaps').href =
+    'https://www.google.com/maps/dir/?api=1&destination=' + point + '&travelmode=driving';
+}
+
+/* distanta in linie dreapta intre doua puncte, in km */
+function kmBetween(a, b) {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/* cu masina sau pe jos: schimbam serviciul care calculeaza drumul */
+function setMode(mode) {
+  if (mapMode === mode) return;
+  mapMode = mode;
+  document.getElementById('modeCar').classList.toggle('on', mode === 'masina');
+  document.getElementById('modeFoot').classList.toggle('on', mode === 'jos');
+  navSpoken = {};
+  if (navOn) {
+    navSteps = [];
+    navPts = [];
+    navLastAsk = Date.now();
+    setNavStep('^', '', 'Recalculez traseul...');
+    if (navLastFix) askRoute(navLastFix).then(() => { if (navLastFix) updateStep(navLastFix); });
+    return;
+  }
+  const from = v('mapFrom');
+  document.getElementById('mapTrip').innerHTML = '<div class="trip-line">Recalculez traseul...</div>';
+  loadMap(from ? '&from=' + encodeURIComponent(from) : '');
+}
+
+function routeFromText() {
+  const from = v('mapFrom');
+  if (!from) { showMsg('Scrie de unde pleci.'); return; }
+  document.getElementById('mapTrip').innerHTML = '<div class="trip-line">Caut traseul...</div>';
+  loadMap('&from=' + encodeURIComponent(from));
+}
+
+function routeFromGps() {
+  if (!navigator.geolocation) {
+    showMsg('Dispozitivul nu da acces la locatie. Scrie adresa de plecare.');
+    return;
+  }
+  document.getElementById('mapTrip').innerHTML = '<div class="trip-line">Iti caut locatia...</div>';
+  navigator.geolocation.getCurrentPosition(
+    pos => loadMap('&fromLat=' + pos.coords.latitude + '&fromLon=' + pos.coords.longitude),
+    () => {
+      document.getElementById('mapTrip').innerHTML = '';
+      showMsg('Nu am primit locatia. Scrie adresa de plecare.');
+    },
+    { timeout: 8000, enableHighAccuracy: false });
+}
+
+async function saveStart() {
+  const from = v('mapFrom');
+  if (!from) { showMsg('Scrie mai intai de unde pleci.'); return; }
+  try {
+    const j = await api('start', 'POST', { from: from });
+    document.getElementById('mapFrom').value = j.from.addr;
+    showMsg(j.message);
   } catch (e) { fail(e); }
 }
 
@@ -2043,6 +2616,10 @@ renderRegAvatar();
 </html>
         """;
 
+    /** Pagina intreaga. E impartita in trei bucati fiindca o constanta
+     *  de tip text din Java nu poate depasi 64 KB. */
+    private static final String PAGE = String.join("", PAGE_HEAD, PAGE_BODY, PAGE_JS);
+
     record Player(int id, String name, String availability, String zone, String avatar, String bio) {}
     record Scored(Player player, int points, int score) {}
     record Session(int userId, long expires) {}
@@ -2113,6 +2690,13 @@ renderRegAvatar();
         addColumn("players", "avatar", "TEXT NOT NULL DEFAULT ''");
         addColumn("players", "bio", "TEXT NOT NULL DEFAULT ''");
         addColumn("users", "recovery_hash", "TEXT NOT NULL DEFAULT ''");
+        addColumn("posts", "lat", "REAL NOT NULL DEFAULT 0");
+        addColumn("posts", "lon", "REAL NOT NULL DEFAULT 0");
+        addColumn("posts", "addr", "TEXT NOT NULL DEFAULT ''");
+        addColumn("players", "start_place", "TEXT NOT NULL DEFAULT ''");
+        addColumn("players", "start_lat", "REAL NOT NULL DEFAULT 0");
+        addColumn("players", "start_lon", "REAL NOT NULL DEFAULT 0");
+        addColumn("route_cache", "steps", "TEXT NOT NULL DEFAULT '[]'");
         seedDemoData();
     }
 
@@ -2178,7 +2762,7 @@ renderRegAvatar();
     private static void startServer() throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", SportMatch::handle);
-        server.setExecutor(Executors.newSingleThreadExecutor());
+        server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
     }
 
@@ -2262,6 +2846,10 @@ renderRegAvatar();
             case "GET /api/matches" -> matches(me);
             case "POST /api/match" -> recordMatch(me, p);
             case "GET /api/preview" -> previewMatch(me, p);
+            case "GET /api/map" -> mapJson(me, p);
+            case "GET /api/nav" -> navJson(p);
+            case "GET /api/geocode" -> geocodeJson(p);
+            case "POST /api/start" -> setStart(me, p);
             case "GET /api/profile" -> profileJson(me, p);
             case "POST /api/profile" -> updateProfile(me, p);
             case "GET /api/feed" -> feedJson(me, p);
@@ -2602,6 +3190,710 @@ renderRegAvatar();
         }
         exec("INSERT INTO post_joins (post_id, player_id) VALUES (?, ?)", postId, me);
         return ok("Te-ai inscris la meci. Organizatorul te vede in lista.");
+    }
+
+
+    // =====================================================================
+    //  Harta: locatia terenului, punctul de plecare si traseul dintre ele
+    //
+    //  Aici folosim doua servicii web publice (API-uri REST, fara cont):
+    //    - Nominatim (OpenStreetMap): adresa -> coordonate (geocodare) si
+    //      coordonate -> adresa (geocodare inversa);
+    //    - OSRM: traseul, distanta si durata dintre doua coordonate.
+    //  Harta din pagina ia dalele de la serverul de dale OpenStreetMap.
+    //  Fiecare raspuns se pastreaza in geo_cache / route_cache, ca sa nu
+    //  cerem de doua ori acelasi lucru si sa respectam limitele serviciilor.
+    // =====================================================================
+
+    /** Un punct pe harta: coordonate si adresa scrisa cu litere. */
+    private record Spot(double lat, double lon, String addr) {}
+
+    /** Un drum intre doua puncte: cati km, cate minute, linia de pe harta
+     *  si indicatiile pas cu pas (viraje), gata scrise in JSON. */
+    private record Trip(double km, int minutes, String coords, String steps) {}
+
+    private static final HttpClient HTTP = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+    private static final String HTTP_UA = "SportMatch/1.0 (proiect studentesc)";
+    private static final String NOMINATIM = "https://nominatim.openstreetmap.org";
+    private static final String OSRM = "https://router.project-osrm.org";
+    private static final String VALHALLA = "https://valhalla1.openstreetmap.de";
+    private static final String ON_FOOT = "jos";
+
+    /** Terenurile din anunturile demo, cu coordonatele lor din Timisoara. */
+    private static final Map<String, Spot> KNOWN_PLACES = new HashMap<>();
+
+    static {
+        knownPlace("Baza sportiva Fabric", 45.7563, 21.2441);
+        knownPlace("Teren Girocului", 45.7215, 21.2298);
+        knownPlace("Teren Giroc", 45.7032, 21.2301);
+        knownPlace("Parcul Studentesc", 45.7471, 21.2287);
+        knownPlace("Complex Dumbravita", 45.8031, 21.2443);
+        knownPlace("Teren Dumbravita 2", 45.8068, 21.2512);
+        knownPlace("Sala Olimpia", 45.7571, 21.2231);
+        knownPlace("Clubul Soarelui", 45.7281, 21.2292);
+        knownPlace("Clubul Central", 45.7558, 21.2287);
+        knownPlace("Teren Mehala", 45.7682, 21.1962);
+        knownPlace("Sala Lipovei", 45.7733, 21.2261);
+        knownPlace("Teren Lipovei", 45.7748, 21.2224);
+        knownPlace("Parcul Rozelor", 45.7506, 21.2281);
+        knownPlace("Padel Club Elisabetin", 45.7421, 21.2203);
+        knownPlace("Sala Elisabetin", 45.7438, 21.2178);
+        knownPlace("Baza Aradului", 45.7852, 21.2324);
+        knownPlace("Padel Club Aradului", 45.7883, 21.2297);
+        knownPlace("Sala Torontalului", 45.7801, 21.2131);
+        knownPlace("Sala Iosefin", 45.7432, 21.2071);
+        knownPlace("Bazin Termal", 45.7342, 21.2423);
+        knownPlace("Stadionul Dan Paltinisanu", 45.7366, 21.2338);
+    }
+
+    private static void knownPlace(String name, double lat, double lon) {
+        KNOWN_PLACES.put(name.toLowerCase(), new Spot(lat, lon, name + ", Timisoara"));
+    }
+
+    // ---------- apelul catre serviciile web ----------
+
+    /** Cere o adresa web si intoarce textul raspunsului (JSON). */
+    private static String httpGetText(String url) {
+        try {
+            HttpRequest r = HttpRequest.newBuilder(URI.create(url))
+                    .header("User-Agent", HTTP_UA)
+                    .header("Accept", "application/json")
+                    .header("Accept-Language", "ro")
+                    .timeout(Duration.ofSeconds(8))
+                    .GET().build();
+            HttpResponse<String> resp = HTTP.send(r, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (resp.statusCode() != 200) {
+                throw new IllegalArgumentException("Serviciul de harti a raspuns cu codul " + resp.statusCode() + ".");
+            }
+            return resp.body();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Nu am ajuns la serviciul de harti. Verifica internetul.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalArgumentException("Cererea catre serviciul de harti a fost intrerupta.");
+        }
+    }
+
+    // ---------- un parser JSON mic, cat sa citim raspunsurile serviciilor ----------
+
+    /** Transforma textul JSON in Map / List / String / Double / Boolean. */
+    private static final class Json {
+        private final String text;
+        private int i;
+
+        private Json(String text) {
+            this.text = text;
+        }
+
+        static Object parse(String raw) {
+            Json j = new Json(raw);
+            j.skip();
+            return j.value();
+        }
+
+        private void skip() {
+            while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
+        }
+
+        private Object value() {
+            if (i >= text.length()) return null;
+            char c = text.charAt(i);
+            if (c == '{') return object();
+            if (c == '[') return array();
+            if (c == '"') return string();
+            if (c == 't') { i += 4; return Boolean.TRUE; }
+            if (c == 'f') { i += 5; return Boolean.FALSE; }
+            if (c == 'n') { i += 4; return null; }
+            return number();
+        }
+
+        private Map<String, Object> object() {
+            Map<String, Object> map = new LinkedHashMap<>();
+            i++;
+            skip();
+            if (i < text.length() && text.charAt(i) == '}') { i++; return map; }
+            while (i < text.length()) {
+                skip();
+                String key = string();
+                skip();
+                if (i < text.length() && text.charAt(i) == ':') i++;
+                skip();
+                map.put(key, value());
+                skip();
+                char c = i < text.length() ? text.charAt(i++) : '}';
+                if (c == '}') break;
+            }
+            return map;
+        }
+
+        private List<Object> array() {
+            List<Object> list = new ArrayList<>();
+            i++;
+            skip();
+            if (i < text.length() && text.charAt(i) == ']') { i++; return list; }
+            while (i < text.length()) {
+                skip();
+                list.add(value());
+                skip();
+                char c = i < text.length() ? text.charAt(i++) : ']';
+                if (c == ']') break;
+            }
+            return list;
+        }
+
+        private String string() {
+            StringBuilder sb = new StringBuilder();
+            i++;
+            while (i < text.length()) {
+                char c = text.charAt(i++);
+                if (c == '"') break;
+                if (c != '\\') { sb.append(c); continue; }
+                char e = text.charAt(i++);
+                switch (e) {
+                    case 'n' -> sb.append('\n');
+                    case 't' -> sb.append('\t');
+                    case 'r' -> sb.append('\r');
+                    case 'b' -> sb.append('\b');
+                    case 'f' -> sb.append('\f');
+                    case 'u' -> {
+                        sb.append((char) Integer.parseInt(text.substring(i, i + 4), 16));
+                        i += 4;
+                    }
+                    default -> sb.append(e);
+                }
+            }
+            return sb.toString();
+        }
+
+        private Double number() {
+            int start = i;
+            while (i < text.length() && "-+.0123456789eE".indexOf(text.charAt(i)) >= 0) i++;
+            try {
+                return Double.valueOf(text.substring(start, i));
+            } catch (RuntimeException e) {
+                return 0.0;
+            }
+        }
+    }
+
+    /** Merge in adancime: at(raspuns, "routes", 0, "distance"). */
+    private static Object at(Object node, Object... path) {
+        Object current = node;
+        for (Object key : path) {
+            if (current instanceof Map<?, ?> map) {
+                current = map.get(String.valueOf(key));
+            } else if (current instanceof List<?> list && key instanceof Integer index) {
+                current = index >= 0 && index < list.size() ? list.get(index) : null;
+            } else {
+                return null;
+            }
+            if (current == null) return null;
+        }
+        return current;
+    }
+
+    private static String str(Object node, Object... path) {
+        Object found = at(node, path);
+        return found == null ? "" : String.valueOf(found);
+    }
+
+    private static double dbl(Object node, Object... path) {
+        Object found = at(node, path);
+        if (found instanceof Number number) return number.doubleValue();
+        return parseDoubleOr(String.valueOf(found), 0);
+    }
+
+    private static List<Object> items(Object node, Object... path) {
+        Object found = at(node, path);
+        return found instanceof List<?> list ? new ArrayList<>(list) : new ArrayList<>();
+    }
+
+    // ---------- geocodare ----------
+
+    /** Adresa scrisa de om -> coordonate. Mai intai din cache, apoi de la Nominatim. */
+    private static Spot geocode(String raw) throws SQLException {
+        String query = raw == null ? "" : raw.trim();
+        if (query.isEmpty()) throw new IllegalArgumentException("Scrie un loc sau o adresa.");
+        String key = "q:" + query.toLowerCase();
+        Spot cached = cacheGet(key);
+        if (cached != null) return cached;
+
+        Spot known = KNOWN_PLACES.get(query.toLowerCase());
+        if (known != null) {
+            cachePut(key, known);
+            return known;
+        }
+        Spot found = nominatimSearch(query);
+        if (found == null && !query.toLowerCase().contains("timisoara")) {
+            found = nominatimSearch(query + ", Timisoara, Romania");
+        }
+        if (found == null) {
+            throw new IllegalArgumentException("Nu am gasit locul \"" + query + "\". Scrie strada si orasul.");
+        }
+        cachePut(key, found);
+        return found;
+    }
+
+    private static Spot nominatimSearch(String query) {
+        Object root = Json.parse(httpGetText(NOMINATIM + "/search?format=jsonv2&limit=1&q=" + enc(query)));
+        List<Object> found = root instanceof List<?> list ? new ArrayList<>(list) : new ArrayList<>();
+        if (found.isEmpty()) return null;
+        Object first = found.get(0);
+        String addr = str(first, "display_name");
+        return new Spot(dbl(first, "lat"), dbl(first, "lon"), addr.isEmpty() ? query : addr);
+    }
+
+    /** Coordonate -> adresa scrisa cu litere (geocodare inversa). */
+    private static Spot reverseGeocode(double lat, double lon) throws SQLException {
+        String key = String.format(Locale.US, "r:%.5f,%.5f", lat, lon);
+        Spot cached = cacheGet(key);
+        if (cached != null) return cached;
+        Object root = Json.parse(httpGetText(String.format(Locale.US,
+                NOMINATIM + "/reverse?format=jsonv2&lat=%.6f&lon=%.6f", lat, lon)));
+        String addr = str(root, "display_name");
+        Spot spot = new Spot(lat, lon, addr.isEmpty() ? coordLabel(lat, lon) : addr);
+        cachePut(key, spot);
+        return spot;
+    }
+
+    /** Adresa locatiei, iar daca serviciul nu raspunde, doar coordonatele. */
+    private static Spot describe(double lat, double lon, String label) throws SQLException {
+        if (label != null && !label.isBlank()) return new Spot(lat, lon, label.trim());
+        try {
+            return reverseGeocode(lat, lon);
+        } catch (RuntimeException e) {
+            return new Spot(lat, lon, coordLabel(lat, lon));
+        }
+    }
+
+    private static Spot cacheGet(String key) throws SQLException {
+        try (PreparedStatement ps = db.prepareStatement("SELECT lat, lon, addr FROM geo_cache WHERE key = ?")) {
+            ps.setString(1, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return new Spot(rs.getDouble(1), rs.getDouble(2), rs.getString(3));
+            }
+        }
+        return null;
+    }
+
+    private static void cachePut(String key, Spot spot) throws SQLException {
+        exec("INSERT OR REPLACE INTO geo_cache (key, lat, lon, addr) VALUES (?, ?, ?, ?)",
+                key, spot.lat(), spot.lon(), spot.addr());
+    }
+
+    // ---------- traseul ----------
+
+    /** Cu masina intrebam OSRM, pe jos intrebam Valhalla: serverul public
+     *  de la OSRM raspunde la fel pentru orice profil, deci ar da drumuri
+     *  de masina si pietonilor. Valhalla stie trotuare si treceri. */
+    private static Trip routeFor(Spot from, Spot to, String mode, boolean simplified) {
+        return ON_FOOT.equals(mode)
+                ? valhallaAsk(from, to)
+                : osrmAsk(from, to, simplified);
+    }
+
+    /** Traseul de pe harta, pastrat in cache. */
+    private static Trip cachedRoute(Spot from, Spot to, String mode) throws SQLException {
+        String key = String.format(Locale.US, "%s:%.4f,%.4f>%.4f,%.4f",
+                mode, from.lat(), from.lon(), to.lat(), to.lon());
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT km, minutes, coords, steps FROM route_cache WHERE key = ?")) {
+            ps.setString(1, key);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return new Trip(rs.getDouble(1), rs.getInt(2), rs.getString(3), rs.getString(4));
+                }
+            }
+        }
+        Trip trip = routeFor(from, to, mode, true);
+        exec("INSERT OR REPLACE INTO route_cache (key, km, minutes, coords, steps) VALUES (?, ?, ?, ?, ?)",
+                key, trip.km(), trip.minutes(), trip.coords(), trip.steps());
+        return trip;
+    }
+
+    /** Intrebarea propriu-zisa catre OSRM, cu tot cu virajele de pe drum. */
+    private static Trip osrmAsk(Spot from, Spot to, boolean simplified) {
+        Object root = Json.parse(httpGetText(String.format(Locale.US,
+                OSRM + "/route/v1/driving/%.6f,%.6f;%.6f,%.6f"
+                        + "?overview=%s&geometries=geojson&steps=true&alternatives=false",
+                from.lon(), from.lat(), to.lon(), to.lat(), simplified ? "simplified" : "full")));
+        Object route = at(root, "routes", 0);
+        if (route == null) {
+            throw new IllegalArgumentException("Serviciul de trasee nu a gasit un drum intre cele doua puncte.");
+        }
+        StringBuilder line = new StringBuilder("[");
+        for (Object point : items(route, "geometry", "coordinates")) {
+            if (line.length() > 1) line.append(",");
+            line.append("[").append(coord(dbl(point, 0))).append(",").append(coord(dbl(point, 1))).append("]");
+        }
+        line.append("]");
+
+        StringBuilder steps = new StringBuilder("[");
+        for (Object step : items(route, "legs", 0, "steps")) {
+            Object maneuver = at(step, "maneuver");
+            String type = str(maneuver, "type");
+            String modifier = str(maneuver, "modifier");
+            String street = str(step, "name");
+            int exit = (int) dbl(maneuver, "exit");
+            if (steps.length() > 1) steps.append(",");
+            String text = stepText(type, modifier, street, exit);
+            steps.append("{\"text\":").append(q(text))
+                    .append(",\"spoken\":").append(q(text))
+                    .append(",\"street\":").append(q(street))
+                    .append(",\"type\":").append(q(type))
+                    .append(",\"modifier\":").append(q(modifier))
+                    .append(",\"meters\":").append((int) Math.round(dbl(step, "distance")))
+                    .append(",\"lat\":").append(coord(dbl(maneuver, "location", 1)))
+                    .append(",\"lon\":").append(coord(dbl(maneuver, "location", 0)))
+                    .append("}");
+        }
+        steps.append("]");
+
+        return new Trip(dbl(route, "distance") / 1000.0,
+                (int) Math.round(dbl(route, "duration") / 60.0),
+                line.toString(), steps.toString());
+    }
+
+
+    /** Traseul pe jos, de la Valhalla (instanta publica a OpenStreetMap).
+     *  Indicatiile vin direct in romana, cu trotuare si treceri de pietoni. */
+    private static Trip valhallaAsk(Spot from, Spot to) {
+        String query = "{\"locations\":[{\"lat\":" + coord(from.lat()) + ",\"lon\":" + coord(from.lon())
+                + "},{\"lat\":" + coord(to.lat()) + ",\"lon\":" + coord(to.lon())
+                + "}],\"costing\":\"pedestrian\""
+                + ",\"directions_options\":{\"language\":\"ro-RO\",\"units\":\"kilometers\"}}";
+        Object root = Json.parse(httpGetText(VALHALLA + "/route?json=" + enc(query)));
+        Object leg = at(root, "trip", "legs", 0);
+        if (leg == null) {
+            throw new IllegalArgumentException("Serviciul de trasee nu a gasit un drum pe jos.");
+        }
+        List<double[]> shape = decodeShape(str(leg, "shape"));
+
+        StringBuilder line = new StringBuilder("[");
+        for (double[] point : shape) {
+            if (line.length() > 1) line.append(",");
+            line.append("[").append(coord(point[1])).append(",").append(coord(point[0])).append("]");
+        }
+        line.append("]");
+
+        StringBuilder steps = new StringBuilder("[");
+        for (Object move : items(leg, "maneuvers")) {
+            int begin = (int) dbl(move, "begin_shape_index");
+            double[] where = begin >= 0 && begin < shape.size()
+                    ? shape.get(begin)
+                    : new double[]{to.lat(), to.lon()};
+            String text = tidyFoot(str(move, "instruction"));
+            String spoken = tidyFoot(str(move, "verbal_pre_transition_instruction"));
+            if (steps.length() > 1) steps.append(",");
+            steps.append("{\"text\":").append(q(text))
+                    .append(",\"spoken\":").append(q(spoken.isEmpty() ? text : spoken))
+                    .append(",\"street\":").append(q(""))
+                    .append(",\"type\":").append(q("walk"))
+                    .append(",\"modifier\":").append(q(footTurn((int) dbl(move, "type"))))
+                    .append(",\"meters\":").append((int) Math.round(dbl(move, "length") * 1000))
+                    .append(",\"lat\":").append(coord(where[0]))
+                    .append(",\"lon\":").append(coord(where[1]))
+                    .append("}");
+        }
+        steps.append("]");
+
+        return new Trip(dbl(root, "trip", "summary", "length"),
+                (int) Math.round(dbl(root, "trip", "summary", "time") / 60.0),
+                line.toString(), steps.toString());
+    }
+
+    /** Valhalla lasa netraduse numele generice ale drumurilor de pietoni. */
+    private static final String[][] FOOT_WORDS = {
+        {"the crosswalk", "trecerea de pietoni"},
+        {"the pedestrian crossing", "trecerea de pietoni"},
+        {"the sidewalk", "trotuar"},
+        {"the walkway", "alee"},
+        {"the footway", "alee"},
+        {"the path", "poteca"},
+        {"the track", "drumul de pamant"},
+        {"the stairs", "scari"},
+        {"the steps", "trepte"},
+        {"the footbridge", "pasarela"},
+        {"the alley", "aleea"},
+        {"the cycleway", "pista de biciclete"},
+    };
+
+    /** Inlocuim numele acelea cu varianta romaneasca. */
+    private static String tidyFoot(String text) {
+        String out = text;
+        for (String[] pair : FOOT_WORDS) out = out.replace(pair[0], pair[1]);
+        return out;
+    }
+
+    /** Valhalla da felul virajului ca numar; il traducem in stanga / dreapta. */
+    private static String footTurn(int type) {
+        return switch (type) {
+            case 9, 10, 11, 18, 20, 23 -> "right";
+            case 14, 15, 16, 19, 21, 24 -> "left";
+            case 12, 13 -> "uturn";
+            default -> "straight";
+        };
+    }
+
+    /** Valhalla trimite traseul ca sir comprimat (polyline cu 6 zecimale). */
+    private static List<double[]> decodeShape(String encoded) {
+        List<double[]> points = new ArrayList<>();
+        int index = 0;
+        int lat = 0;
+        int lon = 0;
+        while (index < encoded.length()) {
+            int shift = 0;
+            int result = 0;
+            int b;
+            do {
+                b = encoded.charAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20 && index < encoded.length());
+            lat += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
+            shift = 0;
+            result = 0;
+            do {
+                b = encoded.charAt(index++) - 63;
+                result |= (b & 0x1f) << shift;
+                shift += 5;
+            } while (b >= 0x20 && index < encoded.length());
+            lon += (result & 1) != 0 ? ~(result >> 1) : result >> 1;
+            points.add(new double[]{lat / 1e6, lon / 1e6});
+        }
+        return points;
+    }
+
+    /** Indicatia scrisa pe romaneste pentru un viraj primit de la OSRM. */
+    private static String stepText(String type, String modifier, String name, int exit) {
+        String street = name == null ? "" : name.trim();
+        String on = street.isEmpty() ? "" : " pe " + street;
+        return switch (type) {
+            case "depart" -> street.isEmpty() ? "Porneste la drum" : "Porneste pe " + street;
+            case "arrive" -> "Ai ajuns la destinatie";
+            case "roundabout", "rotary", "roundabout turn" -> exit > 0
+                    ? "In sensul giratoriu, iesi pe iesirea " + exit + on
+                    : "Intra in sensul giratoriu";
+            case "merge" -> "Intra" + (street.isEmpty() ? " pe drum" : on);
+            case "on ramp" -> "Intra pe rampa" + on;
+            case "off ramp" -> "Iesi de pe drum" + on;
+            case "fork" -> "La bifurcatie tine " + direction(modifier) + on;
+            case "end of road" -> "La capatul strazii o iei " + direction(modifier) + on;
+            case "new name", "continue", "notification" -> "Continua" + (street.isEmpty() ? " inainte" : on);
+            default -> {
+                if ("uturn".equals(modifier)) yield "Intoarce-te" + on;
+                if ("straight".equals(modifier)) yield "Mergi drept inainte" + on;
+                yield "Vireaza " + direction(modifier) + on;
+            }
+        };
+    }
+
+    private static String direction(String modifier) {
+        if (modifier == null) return "";
+        return switch (modifier) {
+            case "left" -> "la stanga";
+            case "right" -> "la dreapta";
+            case "slight left" -> "usor la stanga";
+            case "slight right" -> "usor la dreapta";
+            case "sharp left" -> "strans la stanga";
+            case "sharp right" -> "strans la dreapta";
+            case "straight" -> "drept inainte";
+            case "uturn" -> "in sens invers";
+            default -> "";
+        };
+    }
+
+    /** Distanta in linie dreapta, cand serviciul de trasee nu raspunde. */
+    private static double straightKm(Spot a, Spot b) {
+        double r = 6371.0;
+        double dLat = Math.toRadians(b.lat() - a.lat());
+        double dLon = Math.toRadians(b.lon() - a.lon());
+        double h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(a.lat())) * Math.cos(Math.toRadians(b.lat()))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return r * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    // ---------- rutele din API ----------
+
+    /** Harta unui anunt: terenul, punctul de plecare si traseul dintre ele. */
+    private static String mapJson(int me, Map<String, String> p) throws SQLException {
+        int postId = intParam(p, "post");
+        String mode = travelMode(p);
+        String title;
+        String place;
+        String when;
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT title, place, when_text FROM posts WHERE id = ?")) {
+            ps.setInt(1, postId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Anuntul nu exista.");
+                title = rs.getString(1);
+                place = rs.getString(2);
+                when = rs.getString(3);
+            }
+        }
+        Spot dest = postSpot(postId, place);
+
+        String fromLat = p.getOrDefault("fromLat", "").trim();
+        String fromLon = p.getOrDefault("fromLon", "").trim();
+        String fromText = p.getOrDefault("from", "").trim();
+        Spot from;
+        if (!fromLat.isEmpty() && !fromLon.isEmpty()) {
+            from = describe(parseDoubleOr(fromLat, 0), parseDoubleOr(fromLon, 0), fromText);
+        } else if (!fromText.isEmpty()) {
+            from = geocode(fromText);
+        } else {
+            from = savedStart(me);
+        }
+
+        String trip = "null";
+        String note = "";
+        if (from != null) {
+            try {
+                Trip t = cachedRoute(from, dest, mode);
+                trip = "{\"km\":" + num(t.km()) + ",\"minutes\":" + t.minutes()
+                        + ",\"coords\":" + t.coords() + ",\"steps\":" + t.steps() + "}";
+            } catch (RuntimeException e) {
+                note = e.getMessage() + " Arat distanta in linie dreapta.";
+                trip = "{\"km\":" + num(straightKm(from, dest)) + ",\"minutes\":0,\"coords\":[],\"steps\":[]}";
+            }
+        }
+        return "{\"ok\":true,\"post\":" + postId + ",\"mode\":" + q(mode) + ",\"title\":" + q(title)
+                + ",\"place\":" + q(place) + ",\"when\":" + q(when)
+                + ",\"dest\":" + spotJson(dest)
+                + ",\"from\":" + (from == null ? "null" : spotJson(from))
+                + ",\"trip\":" + trip + ",\"note\":" + q(note) + ",\"message\":\"\"}";
+    }
+
+
+    /** Navigarea in timp real: traseul de la pozitia de acum pana la teren.
+     *  Telefonul trimite coordonatele la fiecare recalculare, noi cerem
+     *  de la OSRM traseul proaspat si virajele pana la destinatie. */
+    private static String navJson(Map<String, String> p) throws SQLException {
+        int postId = intParam(p, "post");
+        String place;
+        try (PreparedStatement ps = db.prepareStatement("SELECT place FROM posts WHERE id = ?")) {
+            ps.setInt(1, postId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) throw new IllegalArgumentException("Anuntul nu exista.");
+                place = rs.getString(1);
+            }
+        }
+        Spot dest = postSpot(postId, place);
+        String lat = p.getOrDefault("lat", "").trim();
+        String lon = p.getOrDefault("lon", "").trim();
+        if (lat.isEmpty() || lon.isEmpty()) {
+            throw new IllegalArgumentException("Lipseste pozitia ta.");
+        }
+        Spot here = new Spot(parseDoubleOr(lat, 0), parseDoubleOr(lon, 0), "");
+        double left = straightKm(here, dest);
+        if (left < 0.06) {
+            return "{\"ok\":true,\"arrived\":true,\"dest\":" + spotJson(dest)
+                    + ",\"trip\":null,\"message\":\"Ai ajuns la teren.\"}";
+        }
+        Trip trip = routeFor(here, dest, travelMode(p), false);
+        return "{\"ok\":true,\"arrived\":false,\"dest\":" + spotJson(dest)
+                + ",\"trip\":{\"km\":" + num(trip.km()) + ",\"minutes\":" + trip.minutes()
+                + ",\"coords\":" + trip.coords() + ",\"steps\":" + trip.steps()
+                + "},\"message\":\"\"}";
+    }
+
+    /** Cum ajungi: cu masina (implicit) sau pe jos. */
+    private static String travelMode(Map<String, String> p) {
+        return ON_FOOT.equals(p.getOrDefault("mode", "").trim()) ? ON_FOOT : "masina";
+    }
+
+    /** Coordonatele terenului din anunt, geocodate la prima deschidere a hartii. */
+    private static Spot postSpot(int postId, String place) throws SQLException {
+        try (PreparedStatement ps = db.prepareStatement("SELECT lat, lon, addr FROM posts WHERE id = ?")) {
+            ps.setInt(1, postId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    double lat = rs.getDouble(1);
+                    double lon = rs.getDouble(2);
+                    if (lat != 0 || lon != 0) {
+                        String addr = rs.getString(3);
+                        return new Spot(lat, lon, addr.isEmpty() ? place : addr);
+                    }
+                }
+            }
+        }
+        Spot spot = geocode(place);
+        exec("UPDATE posts SET lat = ?, lon = ?, addr = ? WHERE id = ?",
+                spot.lat(), spot.lon(), spot.addr(), postId);
+        return spot;
+    }
+
+    /** Punctul de plecare salvat in profil, sau null daca nu e setat. */
+    private static Spot savedStart(int me) throws SQLException {
+        try (PreparedStatement ps = db.prepareStatement(
+                "SELECT start_place, start_lat, start_lon FROM players WHERE id = ?")) {
+            ps.setInt(1, me);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    double lat = rs.getDouble(2);
+                    double lon = rs.getDouble(3);
+                    if (lat != 0 || lon != 0) {
+                        String label = rs.getString(1);
+                        return new Spot(lat, lon, label.isEmpty() ? coordLabel(lat, lon) : label);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Salvez punctul de plecare implicit, ca sa nu-l scriu la fiecare anunt. */
+    private static String setStart(int me, Map<String, String> p) throws SQLException {
+        String lat = p.getOrDefault("fromLat", "").trim();
+        String lon = p.getOrDefault("fromLon", "").trim();
+        String text = p.getOrDefault("from", "").trim();
+        Spot spot = (!lat.isEmpty() && !lon.isEmpty())
+                ? describe(parseDoubleOr(lat, 0), parseDoubleOr(lon, 0), text)
+                : geocode(text);
+        exec("UPDATE players SET start_place = ?, start_lat = ?, start_lon = ? WHERE id = ?",
+                spot.addr(), spot.lat(), spot.lon(), me);
+        return "{\"ok\":true,\"from\":" + spotJson(spot)
+                + ",\"message\":\"Punctul de plecare a fost salvat.\"}";
+    }
+
+    /** Geocodare la cerere: ?q=adresa, sau ?lat=&lon= pentru adresa unei locatii. */
+    private static String geocodeJson(Map<String, String> p) throws SQLException {
+        String lat = p.getOrDefault("lat", "").trim();
+        String lon = p.getOrDefault("lon", "").trim();
+        Spot spot = (!lat.isEmpty() && !lon.isEmpty())
+                ? reverseGeocode(parseDoubleOr(lat, 0), parseDoubleOr(lon, 0))
+                : geocode(p.getOrDefault("q", ""));
+        return "{\"ok\":true,\"spot\":" + spotJson(spot) + ",\"message\":\"\"}";
+    }
+
+    private static String spotJson(Spot spot) {
+        return "{\"lat\":" + coord(spot.lat()) + ",\"lon\":" + coord(spot.lon())
+                + ",\"addr\":" + q(spot.addr()) + "}";
+    }
+
+    private static String coord(double value) {
+        return String.format(Locale.US, "%.6f", value);
+    }
+
+    private static String coordLabel(double lat, double lon) {
+        return String.format(Locale.US, "Locatie %.5f, %.5f", lat, lon);
+    }
+
+    private static String enc(String text) {
+        return URLEncoder.encode(text, StandardCharsets.UTF_8);
+    }
+
+    private static double parseDoubleOr(String raw, double fallback) {
+        try {
+            return Double.parseDouble(raw.trim());
+        } catch (RuntimeException e) {
+            return fallback;
+        }
     }
 
     /** Poza de profil: goala sau o imagine trimisa ca data URL, de cel mult 400 KB. */

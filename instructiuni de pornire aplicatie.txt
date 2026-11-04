@@ -1,8 +1,34 @@
 
 ---Pornire aplicatie---
 
-1. ipconfic in cmd ca sa vezi adresa ip ca sa poti sa rulezi aplicatia
-2.    javac -encoding UTF-8 -cp "sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch.java
-      java -cp ".;sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch
-      acestea folosesc la deschiderea aplicatiei
-3. have fun
+1.    javac -encoding UTF-8 -cp "sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch.java
+2.    java -cp ".;sqlite-jdbc-3.45.1.0.jar;slf4j-api-1.7.32.jar" SportMatch
+3.    .\cloudflared.exe tunnel --url http://localhost:8080
+4.    have fun
+
+---Harta (API-uri folosite)---
+
+Butonul "Harta" de la fiecare anunt are nevoie de internet. Foloseste:
+  - Nominatim (OpenStreetMap)  https://nominatim.openstreetmap.org
+      adresa -> coordonate si coordonate -> adresa
+  - OSRM                       https://router.project-osrm.org
+      traseul cu masina: distanta, durata si virajele
+  - Valhalla (OpenStreetMap)   https://valhalla1.openstreetmap.de
+      traseul pe jos, cu indicatiile deja scrise in romana
+      (serverul public OSRM raspunde la fel pentru orice profil,
+       asa ca pe jos ar da drumuri de masina)
+  - dalele hartii              https://tile.openstreetmap.org
+  - Leaflet 1.9.4 (unpkg) pentru harta din pagina
+
+Rutele noastre: GET /api/map?post=&mode=, GET /api/nav?post=&mode=&lat=&lon=,
+GET /api/geocode?q=... sau ?lat=&lon=, POST /api/start.
+mode poate fi "masina" (implicit) sau "jos".
+Raspunsurile se tin in tabelele geo_cache si route_cache din sportmatch.db.
+
+"Locatia mea" si butonul "Navigheaza spre teren" folosesc GPS-ul din browser.
+Merg doar pe https (adica prin cloudflared) sau pe localhost. Pe
+http://192.168.x.x browserul nu da locatia: acolo scrie adresa de plecare.
+
+Navigarea: pozitia se urmareste in timp real, traseul se recalculeaza la
+25 de secunde sau cand te abati peste 80 m de drum, indicatiile se spun
+cu voce (ro-RO), iar ecranul e tinut aprins cat timp navighezi.
